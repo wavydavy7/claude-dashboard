@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude setup — skills, routines, loops</title>
+<style>
+  :root {
+    --bg:#f6f7f9; --card:#ffffff; --ink:#1a1d23; --muted:#6b7280; --line:#e5e7eb;
+    --ok:#15803d; --ok-bg:#dcfce7; --warn:#b45309; --warn-bg:#fef3c7; --off:#6b7280; --off-bg:#e5e7eb;
+    --bad:#b91c1c; --bad-bg:#fee2e2; --accent:#4f46e5; --accent-bg:#eef2ff; --chip:#f3f4f6;
+    --routine:#4f46e5; --task:#0891b2; --loop:#a16207; --skill:#059669; --plugin:#c026d3; --hook:#ea580c; --mcp:#475569;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#0f1115; --card:#171a21; --ink:#e7e9ee; --muted:#9aa3b2; --line:#2a2f3a;
+      --ok:#4ade80; --ok-bg:#14532d55; --warn:#fbbf24; --warn-bg:#78350f55; --off:#9aa3b2; --off-bg:#2a2f3a;
+      --bad:#f87171; --bad-bg:#7f1d1d55; --accent:#818cf8; --accent-bg:#312e8155; --chip:#20242d;
+      --routine:#818cf8; --task:#22d3ee; --loop:#facc15; --skill:#34d399; --plugin:#e879f9; --hook:#fb923c; --mcp:#94a3b8;
+    }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif; }
+  .wrap { max-width:1180px; margin:0 auto; padding:28px 22px 60px; }
+  header { display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end; justify-content:space-between; margin-bottom:18px; }
+  h1 { font-size:22px; margin:0 0 4px; letter-spacing:-.01em; }
+  .sub { color:var(--muted); font-size:13px; }
+  .controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  input[type=search] { background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:9px 12px; font-size:14px; width:260px; }
+  input[type=search]:focus { outline:2px solid var(--accent); border-color:transparent; }
+  .refresh { display:flex; gap:6px; align-items:center; }
+  .refresh .btn { padding:8px 12px; font-size:13px; }
+  .spin { display:inline-block; width:12px; height:12px; border:2px solid var(--accent); border-right-color:transparent; border-radius:50%; animation:sp .8s linear infinite; vertical-align:-2px; margin-right:5px; }
+  @keyframes sp { to { transform:rotate(360deg); } }
+  .status { font-size:12px; color:var(--muted); min-height:16px; margin-top:4px; text-align:right; }
+  .status.err { color:var(--bad); }
+
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin:14px 0 22px; }
+  .tile { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; border-top:3px solid var(--c,var(--accent)); }
+  .tile .n { font-size:26px; font-weight:650; line-height:1.1; }
+  .tile .l { color:var(--muted); font-size:12px; margin-top:2px; }
+  .tile .d { font-size:12px; margin-top:6px; }
+
+  .flags { background:var(--warn-bg); border:1px solid color-mix(in srgb,var(--warn) 40%,transparent); border-radius:10px; padding:12px 14px; margin-bottom:22px; }
+  .flags h3 { margin:0 0 6px; font-size:13px; color:var(--warn); text-transform:uppercase; letter-spacing:.06em; }
+  .flags li { margin:3px 0; }
+  .flags li.issue { display:flex; gap:8px; align-items:flex-start; }
+  .flags li.issue .x { flex:none; border:1px solid color-mix(in srgb,var(--warn) 40%,transparent); background:transparent; color:var(--warn); border-radius:6px; width:22px; height:22px; cursor:pointer; font-size:14px; line-height:1; margin-top:1px; }
+  .flags li.issue .x:hover { background:var(--warn); color:var(--bg); }
+  .flags li.issue .skill { cursor:pointer; text-decoration:underline dotted; }
+  .flags li.issue small { display:block; color:var(--muted); }
+  .flags h3 .n { font-weight:400; text-transform:none; letter-spacing:0; margin-left:6px; }
+  .flags li.quiet { color:var(--muted); font-style:italic; list-style:none; margin-left:-18px; }
+  .flags details.sil { margin-top:8px; }
+  .flags details.sil summary { color:var(--warn); font-size:12px; cursor:pointer; }
+  .flags details.sil ul { margin:6px 0 0; }
+  .flags li.silenced { opacity:.6; }
+  .flags li.issue .x.restore { font-size:13px; }
+  .flags:empty { display:none; }
+
+  h2 { font-size:15px; margin:26px 0 10px; display:flex; align-items:center; gap:8px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); }
+  h2 .dot { width:10px; height:10px; border-radius:50%; background:var(--c); display:inline-block; }
+  h2 .cnt { background:var(--chip); color:var(--ink); border-radius:999px; padding:1px 8px; font-size:12px; letter-spacing:0; text-transform:none; }
+  h2 .src { margin-left:auto; font-size:11px; letter-spacing:0; text-transform:none; font-weight:400; }
+
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; border-left:4px solid var(--c,var(--line)); }
+  .card.hide { display:none; }
+  .card .top { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
+  .card .name { font-weight:620; font-size:15px; }
+  .card .name code { font-size:13px; }
+  .card .desc { color:var(--muted); margin:6px 0 8px; font-size:13px; }
+  .kv { display:grid; grid-template-columns:auto 1fr; gap:3px 12px; font-size:12.5px; margin-top:6px; }
+  .kv dt { color:var(--muted); }
+  .kv dd { margin:0; }
+  code, .mono { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; background:var(--chip); padding:1px 5px; border-radius:4px; }
+  .pill { display:inline-block; font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; white-space:nowrap; }
+  .pill.ok { background:var(--ok-bg); color:var(--ok); } .pill.warn { background:var(--warn-bg); color:var(--warn); }
+  .pill.off { background:var(--off-bg); color:var(--off); } .pill.bad { background:var(--bad-bg); color:var(--bad); }
+  .chips { display:flex; flex-wrap:wrap; gap:5px; margin-top:8px; }
+  .chip { background:var(--chip); border-radius:6px; padding:2px 7px; font-size:11.5px; color:var(--ink); }
+  details { margin-top:8px; }
+  summary { cursor:pointer; color:var(--accent); font-size:12.5px; }
+  details ul { margin:6px 0 0; padding-left:18px; font-size:12.5px; columns:2; }
+  details li { break-inside:avoid; margin:1px 0; }
+  .empty { color:var(--muted); font-style:italic; padding:8px 0; }
+  .howto { color:var(--muted); font-size:12px; margin:-2px 0 10px; }
+
+  .timeline { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px 10px; }
+  .tl-row { display:grid; grid-template-columns:200px 1fr; align-items:center; gap:12px; padding:6px 0; border-top:1px solid var(--line); }
+  .tl-row:first-of-type { border-top:none; }
+  .tl-label { font-size:13px; }
+  .tl-label small { display:block; color:var(--muted); font-size:11.5px; }
+  .tl-track { position:relative; height:22px; background:var(--chip); border-radius:6px; }
+  .tick { position:absolute; top:3px; bottom:3px; width:3px; border-radius:2px; background:var(--c); }
+  .tick.big { width:8px; border-radius:4px; }
+  .tick.faded { opacity:.35; }
+  .hours { display:grid; grid-template-columns:200px 1fr; gap:12px; margin-top:4px; }
+  .hours div { display:flex; justify-content:space-between; color:var(--muted); font-size:11px; }
+
+  .actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+  .btn { border:1px solid var(--line); background:var(--chip); color:var(--ink); border-radius:7px; padding:4px 10px; font-size:12px; cursor:pointer; font-family:inherit; text-decoration:none; }
+  .btn:hover { border-color:var(--accent); color:var(--accent); }
+  .btn.primary { background:var(--accent-bg); color:var(--accent); border-color:transparent; }
+  .btn.danger:hover { border-color:var(--bad); color:var(--bad); }
+  .btn:disabled { opacity:.5; cursor:default; }
+  .toast { position:fixed; left:50%; bottom:22px; transform:translateX(-50%); background:var(--ink); color:var(--bg); padding:10px 16px; border-radius:10px; font-size:13px; max-width:620px; box-shadow:0 8px 30px rgba(0,0,0,.25); opacity:0; pointer-events:none; transition:opacity .2s; z-index:9; }
+  .toast.show { opacity:1; }
+  footer { color:var(--muted); font-size:12px; margin-top:30px; border-top:1px solid var(--line); padding-top:12px; }
+
+  /* skill detail drawer */
+  .clickable { cursor:pointer; }
+  .clickable:hover .name { color:var(--accent); }
+  details li.clickable:hover { color:var(--accent); }
+  .scrim { position:fixed; inset:0; background:rgba(0,0,0,.35); opacity:0; pointer-events:none; transition:opacity .2s; z-index:20; }
+  .drawer { position:fixed; top:0; right:0; bottom:0; width:min(760px,95vw); background:var(--card); border-left:1px solid var(--line); box-shadow:-12px 0 40px rgba(0,0,0,.25); transform:translateX(102%); transition:transform .22s; z-index:21; display:flex; flex-direction:column; }
+  .drawer.open, .scrim.open { transform:none; opacity:1; pointer-events:auto; }
+  .dr-head { padding:14px 18px 10px; border-bottom:1px solid var(--line); display:flex; gap:10px; align-items:flex-start; }
+  .dr-head h3 { margin:0; font-size:16px; }
+  .dr-head .path { color:var(--muted); font-size:11.5px; margin-top:3px; word-break:break-all; }
+  .dr-close { margin-left:auto; background:none; border:none; color:var(--muted); font-size:20px; cursor:pointer; line-height:1; }
+  .dr-body { display:grid; grid-template-columns:200px 1fr; flex:1; min-height:0; }
+  .dr-files { border-right:1px solid var(--line); overflow:auto; padding:10px 8px; font-size:12px; }
+  .dr-files .f { display:block; padding:3px 8px; border-radius:6px; cursor:pointer; color:var(--ink); word-break:break-all; }
+  .dr-files .f:hover { background:var(--chip); } .dr-files .f.active { background:var(--accent-bg); color:var(--accent); }
+  .dr-files .f small { color:var(--muted); }
+  .dr-files h4 { margin:4px 8px 6px; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; }
+  .dr-content { overflow:auto; padding:16px 22px 40px; font-size:13.5px; line-height:1.55; }
+  .md h1,.md h2,.md h3,.md h4 { margin:18px 0 6px; line-height:1.25; letter-spacing:0; text-transform:none; color:var(--ink); display:block; }
+  .md h1 { font-size:20px; } .md h2 { font-size:16px; } .md h3 { font-size:14px; } .md h4 { font-size:13px; }
+  .md p { margin:6px 0; } .md ul,.md ol { margin:6px 0; padding-left:22px; } .md li { margin:2px 0; }
+  .md pre { background:var(--chip); padding:10px 12px; border-radius:8px; overflow:auto; font-size:12px; line-height:1.45; }
+  .md pre code { background:none; padding:0; }
+  .md blockquote { border-left:3px solid var(--line); margin:8px 0; padding:2px 12px; color:var(--muted); }
+  .md table { border-collapse:collapse; font-size:12.5px; margin:8px 0; } .md td,.md th { border:1px solid var(--line); padding:4px 8px; text-align:left; }
+  .md hr { border:none; border-top:1px solid var(--line); margin:14px 0; }
+  .md .fm { background:var(--accent-bg); border-radius:8px; padding:8px 12px; font-size:12px; margin-bottom:10px; }
+  .md .fm b { display:inline-block; min-width:90px; color:var(--accent); }
+  .dr-content.err { color:var(--bad); }
+  .dr-tabs { display:flex; gap:4px; margin-left:16px; }
+  .dr-tabs .tab { border:1px solid var(--line); background:var(--chip); color:var(--muted); border-radius:7px; padding:4px 11px; font-size:12px; cursor:pointer; font-family:inherit; }
+  .dr-tabs .tab.active { background:var(--accent-bg); color:var(--accent); border-color:transparent; }
+  .dr-flow { display:none; overflow:auto; padding:14px 18px 30px; }
+  .drawer.flow .dr-body { display:none; } .drawer.flow .dr-flow { display:block; }
+  .flow-legend { display:flex; gap:12px; flex-wrap:wrap; font-size:11.5px; color:var(--muted); margin-bottom:8px; }
+  .flow-legend i { display:inline-block; width:10px; height:10px; border-radius:3px; vertical-align:-1px; margin-right:4px; }
+  .flow svg { display:block; max-width:100%; font-family:inherit; }
+  .flow .node { cursor:pointer; }
+  .flow .node rect { fill:var(--card); stroke-width:1.5; rx:7; }
+  .flow .node text { font-size:12px; fill:var(--ink); }
+  .flow .node .sub { font-size:10px; fill:var(--muted); }
+  .flow .node.me rect { stroke-width:2.5; fill:var(--accent-bg); }
+  .flow .node:hover rect { filter:brightness(1.08); stroke-width:2.5; }
+  .flow .edge { fill:none; stroke:var(--muted); stroke-width:1.4; opacity:.55; }
+  .flow .edge.imports, .flow .edge.partof { stroke-dasharray:4 3; }
+  .flow .edge.both { stroke:var(--accent); stroke-width:2; opacity:.85; }
+  .flow .node.mutual rect { stroke-width:2.5; stroke-dasharray:none; }
+  .flow-ctx .row.mutual .who { color:var(--accent); }
+  .flow-ctx .row .ctx .dir { color:var(--accent); font-family:inherit; font-size:11.5px; font-weight:600; }
+  .flow .col-title { font-size:11px; fill:var(--muted); text-transform:uppercase; letter-spacing:.06em; }
+  .flow-ctx { margin-top:12px; font-size:12.5px; }
+  .flow-ctx h4 { margin:10px 0 4px; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; }
+  .flow-ctx .row { display:grid; grid-template-columns:190px 1fr; gap:10px; padding:5px 0; border-top:1px solid var(--line); }
+  .flow-ctx .row:first-of-type { border-top:none; }
+  .flow-ctx .row .who { cursor:pointer; color:var(--accent); }
+  .flow-ctx .row .who small { display:block; color:var(--muted); }
+  .flow-ctx .row .ctx { color:var(--muted); font-family:ui-monospace,Menlo,monospace; font-size:11.5px; white-space:pre-wrap; word-break:break-word; }
+  .flow-always { background:var(--chip); border-radius:8px; padding:8px 12px; font-size:12px; color:var(--muted); margin-bottom:10px; }
+  @media (max-width:640px) { .dr-body { grid-template-columns:1fr; } .dr-files { display:none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <h1 id="title">Claude setup</h1>
+    <div class="sub">Everything that runs, triggers, or can be invoked. Local data as of <b id="built"></b>. Cloud routines as of <b id="cloud"></b>. Times shown in your local timezone.</div>
+  </div>
+  <div>
+    <div class="controls">
+      <input type="search" id="q" placeholder="Filter by name, description, connector…" autocomplete="off">
+      <div class="refresh">
+        <button class="btn primary" id="rf-fast" title="Re-read skills, plugins, hooks, tasks from ~/.claude (seconds)">↻ Refresh</button>
+        <button class="btn" id="rf-full" title="Also re-list cloud routines via a headless Claude session (1–3 min)">↻ Refresh + cloud</button>
+      </div>
+    </div>
+    <div class="status" id="rf-status"></div>
+  </div>
+</header>
+
+<div class="tiles" id="tiles"></div>
+<div class="flags" id="flags"></div>
+
+<h2><span class="dot" style="--c:var(--routine)"></span>When things fire (one day, local time)</h2>
+<div class="timeline" id="timeline"></div>
+
+<div id="sections"></div>
+
+<div class="toast" id="toast"></div>
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="dr-head"><div><h3 id="dr-title"></h3><div class="path" id="dr-path"></div></div>
+    <div class="dr-tabs"><button class="tab active" data-tab="contents">Contents</button><button class="tab" data-tab="flow">Flow</button></div>
+    <button class="dr-close" id="dr-close" title="Close (Esc)">×</button></div>
+  <div class="dr-body"><nav class="dr-files" id="dr-files"></nav><div class="dr-content md" id="dr-content"></div></div>
+  <div class="dr-flow flow" id="dr-flow"></div>
+</aside>
+<footer>
+  Generated by <code>~/claude-dashboard/build.py</code>. Hand-maintained items (claude.ai skills, connectors, notes) live in <code>static.json</code>.
+  Start the helper with <code>python3 ~/claude-dashboard/serve.py</code> to enable the Refresh buttons.
+</footer>
+</div>
+
+<script>
+const DATA = /*__DATA__*/{};
+
+// ---------- helpers ----------
+const $ = s => document.querySelector(s);
+const served = location.protocol.startsWith("http");  // opened via serve.py (refresh/skill/dismiss endpoints available)
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const pill = st => ({on:'<span class="pill ok">on</span>', paused:'<span class="pill off">paused</span>', warn:'<span class="pill warn">check</span>', bad:'<span class="pill bad">blocked</span>', off:'<span class="pill off">off</span>', unknown:'<span class="pill off">unknown</span>'}[st] || "");
+const chips = a => a && a.length ? `<div class="chips">${a.map(c=>`<span class="chip">${esc(c)}</span>`).join("")}</div>` : "";
+const kv = pairs => `<dl class="kv">${pairs.filter(p=>p[1]).map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>`;
+const fmt = iso => { if(!iso) return ""; const d=new Date(iso); return isNaN(d) ? esc(iso) : d.toLocaleString(undefined,{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}); };
+const ago = iso => { if(!iso) return null; const h=(Date.now()-new Date(iso))/36e5; return h<1?`${Math.round(h*60)} min ago`:h<48?`${Math.round(h)} h ago`:`${Math.round(h/24)} d ago`; };
+const runPill = st => !st ? "" : /SUCCEEDED/.test(st) ? '<span class="pill ok">succeeded</span>' : /FAIL|ERROR/.test(st) ? '<span class="pill bad">failed</span>' : `<span class="pill off">${esc(st.replace("ROUTINE_RUN_STATUS_","").toLowerCase())}</span>`;
+// cron "m h * * *" in UTC -> local hour (fractional) or "hourly"
+function cronLocal(cron, utc=true){
+  const [m,h,,,dow] = (cron||"").split(/\s+/);
+  if (h==="*") return {hour:"hourly", label:`Hourly at :${String(m).padStart(2,"0")}`};
+  if (!/^\d+$/.test(h||"")) return {hour:null, label:cron};
+  const d = new Date(); utc ? d.setUTCHours(+h, +m||0, 0, 0) : d.setHours(+h, +m||0, 0, 0);
+  const days = ["Sundays","Mondays","Tuesdays","Wednesdays","Thursdays","Fridays","Saturdays"];
+  const dayTxt = dow && dow!=="*" ? (days[+dow]||dow) : "Daily";
+  return {hour:d.getHours()+d.getMinutes()/60, label:`${dayTxt} ${d.toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"})}`};
+}
+
+// ---------- normalise ----------
+const R = DATA.routines.map(r => ({...r, status: r.enabled ? "on" : "paused", sched: cronLocal(r.cron_expression, true), notes: DATA.routine_notes[r.id] || ""}));
+const T = DATA.local_tasks.map(t => { const stale = t.lastRun && (Date.now()-new Date(t.lastRun)) > 2*864e5; return {...t, status: !t.enabled ? "off" : stale ? "warn" : "on", sched: cronLocal(t.cron, false)}; });
+const pluginSkillCount = DATA.plugins.reduce((n,p)=>n+p.skills.length,0);
+
+$("#title").textContent = DATA.title || "Claude setup"; document.title = `${DATA.title || "Claude setup"} — skills, routines, loops`;
+$("#built").textContent = fmt(DATA.built_at);
+$("#cloud").textContent = DATA.cloud_fetched_at ? `${fmt(DATA.cloud_fetched_at)} (${ago(DATA.cloud_fetched_at)})` : "never fetched — press Refresh + cloud";
+
+// ---------- tiles ----------
+const tiles = [
+  { n:`${R.filter(r=>r.status==="on").length}/${R.length}`, l:"cloud routines on", d:R.filter(r=>r.status!=="on").length ? `${R.filter(r=>r.status!=="on").length} paused` : (R.length?"all on":"no cloud data yet"), c:"var(--routine)" },
+  { n:T.length, l:"local scheduled tasks", d:T.some(t=>t.status==="warn")?`${T.filter(t=>t.status==="warn").length} missed recent runs`:"all current", c:"var(--task)" },
+  { n:DATA.loops.length, l:"active loops", d:"per-session; none running", c:"var(--loop)" },
+  { n:DATA.personal_skills.length + pluginSkillCount, l:"skills available", d:`${DATA.personal_skills.length} yours · ${pluginSkillCount} from plugins`, c:"var(--skill)" },
+  { n:DATA.plugins.length, l:"plugins installed", d:DATA.plugins.every(p=>p.status==="on")?"all enabled":`${DATA.plugins.filter(p=>p.status!=="on").length} disabled`, c:"var(--plugin)" },
+  { n:DATA.hooks.length, l:"hooks", d:[...new Set(DATA.hooks.map(h=>h.name.split(" →")[0]))].join(", "), c:"var(--hook)" },
+  { n:DATA.connectors.length, l:"MCP connectors", d:`${DATA.connectors.filter(c=>c.status!=="on").length} need attention`, c:"var(--mcp)" },
+];
+$("#tiles").innerHTML = tiles.map(t=>`<div class="tile" style="--c:${t.c}"><div class="n">${t.n}</div><div class="l">${t.l}</div><div class="d">${t.d}</div></div>`).join("");
+
+// ---------- flags (computed + hand-written), each with a stable key so it can be silenced ----------
+const flags = [];  // {key, html}
+const F = (key, html) => flags.push({key, html});
+if (!DATA.cloud_fetched_at) F("cloud-never", "Cloud routines have not been fetched yet. Press <b>Refresh + cloud</b> (needs the helper running).");
+else if ((Date.now()-new Date(DATA.cloud_fetched_at)) > 2*864e5) F("cloud-stale", `Cloud routine data is ${ago(DATA.cloud_fetched_at)} old. Press <b>Refresh + cloud</b>.`);
+R.filter(r=>r.status!=="on").forEach(r=>F(`routine-paused:${r.id}`, `<b>${esc(r.name)}</b> is paused. Resume it or delete it in claude.ai → Code → Routines.`));
+R.filter(r=>r.last_run_status && !/SUCCEEDED/.test(r.last_run_status)).forEach(r=>F(`routine-failed:${r.id}:${r.last_fired_at}`, `<b>${esc(r.name)}</b> last run did not succeed (${esc(r.last_run_status)}).`));
+T.filter(t=>t.status==="warn").forEach(t=>F(`task-stale:${t.name}:${t.lastRun}`, `<b>${esc(t.name)}</b> last ran ${ago(t.lastRun)}. Local tasks only fire while Claude Code is open.`));
+DATA.connectors.filter(c=>c.status!=="on"&&c.note).forEach(c=>F(`connector:${c.name}`, `<b>${esc(c.name)}</b>: ${esc(c.note)}`));
+DATA.extra_flags.forEach((f,i)=>F(`extra:${f.replace(/<[^>]+>/g,"").slice(0,60)}`, f));
+const SIL = new Set(DATA.silenced || []);
+const shown = flags.filter(f=>!SIL.has(f.key)), hidden = flags.filter(f=>SIL.has(f.key));
+const ISSUES = DATA.issues || [];
+const xBtn = (title) => `<button class="x" title="${served?title:"Start the helper to silence items"}" ${served?"":"disabled"}>×</button>`;
+const issueLi = o => `<li class="issue" data-id="${esc(o.id)}">${xBtn("Delete this item (moves it to skill-issues.dismissed.jsonl)")}<div><span class="skill" data-skillname="${esc(o.skill)}"><b>${esc(o.skill)}</b></span>: ${esc(o.summary)}${o.fix?` <i>Fix: ${esc(o.fix)}</i>`:""}<small>${esc(o.detail||"")}${o.ts?` · ${fmt(o.ts)}`:""}</small></div></li>`;
+const flagLi = f => `<li class="issue flag" data-key="${esc(f.key)}">${xBtn("Silence this bullet (restore from 'silenced' below)")}<div>${f.html}</div></li>`;
+const hiddenLi = f => `<li class="issue silenced" data-key="${esc(f.key)}"><button class="x restore" title="Show this bullet again">↺</button><div>${f.html}</div></li>`;
+function renderFlags(){
+  const total = shown.length + ISSUES.length;
+  $("#flags").innerHTML = (total || hidden.length) ? `<h3>Needs attention${ISSUES.length?`<span class="n">· ${ISSUES.length} logged skill issue${ISSUES.length===1?"":"s"}</span>`:""}</h3>
+    <ul>${ISSUES.map(issueLi).join("")}${shown.map(flagLi).join("")}${!total?'<li class="quiet">Nothing needs attention.</li>':""}</ul>
+    ${hidden.length?`<details class="sil"><summary>${hidden.length} silenced</summary><ul>${hidden.map(hiddenLi).join("")}</ul></details>`:""}` : "";
+}
+renderFlags();
+$("#flags").addEventListener("click", async e => {
+  const x = e.target.closest(".x"); const li = e.target.closest("li.issue");
+  if (x && li) {
+    x.disabled = true;
+    const url = li.dataset.id ? `/issue/dismiss?id=${encodeURIComponent(li.dataset.id)}`
+              : x.classList.contains("restore") ? `/flag/unsilence?key=${encodeURIComponent(li.dataset.key)}`
+              : `/flag/silence?key=${encodeURIComponent(li.dataset.key)}`;
+    const r = await fetch(url).then(r=>r.json()).catch(()=>({ok:false}));
+    if (r.ok) { toast(li.dataset.id ? "Deleted. Kept in ~/.claude/skill-issues.dismissed.jsonl." : x.classList.contains("restore") ? "Restored." : "Silenced. Find it under 'silenced' to restore."); setTimeout(()=>location.reload(), 400); }
+    else { x.disabled=false; toast("Could not update (helper not running?)."); }
+    return;
+  }
+  const sk = e.target.closest(".skill"); if (sk) { const name = sk.dataset.skillname.split("/").pop(); const n = (DATA.graph.nodes||[]).find(n=>n.name===name && n.path); if (n) { const p=n.path.replace(/\/[^/]+$/,""); openSkill(p, n.name, n.kind==="file"?n.name:null, n.id); setTab("contents"); } else toast(`No file found for skill "${name}".`); }
+});
+
+// ---------- timeline ----------
+const tlRows = [
+  ...R.map(r=>({label:r.name, sub:r.sched.label, hour:r.sched.hour, c:"var(--routine)", faded:r.status!=="on"})),
+  ...T.map(t=>({label:t.name, sub:t.sched.label||t.when, hour:t.sched.hour, c:"var(--task)", faded:t.status==="off"})),
+].filter(r=>r.hour!==null);
+$("#timeline").innerHTML = (tlRows.map(r=>{
+  const ticks = r.hour==="hourly"
+    ? Array.from({length:24},(_,h)=>`<span class="tick${r.faded?" faded":""}" style="--c:${r.c};left:${(h+7/60)/24*100}%"></span>`).join("")
+    : `<span class="tick big${r.faded?" faded":""}" style="--c:${r.c};left:calc(${r.hour/24*100}% - 4px)"></span>`;
+  return `<div class="tl-row"><div class="tl-label">${esc(r.label)}<small>${esc(r.sub)}</small></div><div class="tl-track">${ticks}</div></div>`;
+}).join("") || '<div class="empty">Nothing scheduled.</div>') + `<div class="hours"><div></div><div><span>12a</span><span>6a</span><span>12p</span><span>6p</span><span>12a</span></div></div>`;
+
+// ---------- pause / resume / run (copy instruction + open claude.ai) ----------
+const ROUTINES_URL = "https://claude.ai/code/routines";
+let toastT;
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("show"),3500); }
+async function copy(text){ try { await navigator.clipboard.writeText(text); } catch { const ta=document.createElement("textarea"); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); } }
+window.act = async function(kind, id, name, verb){
+  const V = kind==="routine" ? {
+    pause:`Pause my cloud routine "${name}" (${id}): RemoteTrigger update with body {"enabled": false}. Send only that field.`,
+    resume:`Resume my cloud routine "${name}" (${id}): RemoteTrigger update with body {"enabled": true}. Send only that field.`,
+    run:`Run my cloud routine "${name}" (${id}) now: RemoteTrigger action run.`,
+    remove:`Disable my cloud routine "${name}" (${id}) with RemoteTrigger update {"enabled": false}, then tell me how to delete it in claude.ai.` } : {
+    pause:`Pause my local scheduled task "${id}": update_scheduled_task with enabled false.`,
+    resume:`Resume my local scheduled task "${id}": update_scheduled_task with enabled true.`,
+    run:`Run my local scheduled task "${id}" now (run_scheduled_task).` };
+  await copy(V[verb]); toast(`Copied. Paste into a Claude Code chat to ${verb} "${name}".`);
+  if (kind==="routine" && verb!=="run") window.open(ROUTINES_URL, "_blank");
+};
+const A = s => JSON.stringify(s).replace(/"/g,"&quot;");
+const actions = (kind, id, name, status) => `<div class="actions">
+  ${status==="on"||status==="warn" ? `<button class="btn primary" onclick="act('${kind}','${id}',${A(name)},'pause')">⏸ Pause</button>` : `<button class="btn primary" onclick="act('${kind}','${id}',${A(name)},'resume')">▶ Resume</button>`}
+  <button class="btn" onclick="act('${kind}','${id}',${A(name)},'run')">Run now</button>
+  ${kind==="routine" ? `<a class="btn" href="${ROUTINES_URL}" target="_blank">Open in claude.ai ↗</a><button class="btn danger" onclick="act('${kind}','${id}',${A(name)},'remove')">Remove</button>` : ""}
+</div>`;
+
+// ---------- sections ----------
+const S = [];
+S.push({ title:"Cloud routines", c:"var(--routine)", items:R, src:"claude.ai via headless claude -p",
+  howto:"Pause / Resume / Run copy a ready-to-paste instruction for Claude and open the routines page. Paste it into any Claude Code chat to apply, then press Refresh + cloud.",
+  empty:"No cloud data yet. Press <b>Refresh + cloud</b>.",
+  render:r=>`
+  <div class="top"><div class="name">${esc(r.name)}</div>${pill(r.status)}</div>
+  <div class="desc">${esc(r.prompt_head)}…</div>
+  ${kv([["Schedule",`${esc(r.sched.label)} · <code>${esc(r.cron_expression)}</code>`],["Model",`<code>${esc(r.model)}</code>`],["Last run",r.last_fired_at?`${fmt(r.last_fired_at)} (${ago(r.last_fired_at)}) ${runPill(r.last_run_status)}`:""],["Next run",r.status==="on"?fmt(r.next_run_at):"—"],["ID",`<code>${esc(r.id)}</code>`]])}
+  ${chips(r.connectors)}
+  ${r.notes?`<details><summary>Notes</summary><div class="desc">${esc(r.notes)}</div></details>`:""}
+  ${actions("routine", r.id, r.name, r.status)}` });
+
+S.push({ title:"Local scheduled tasks", c:"var(--task)", items:T, src:"~/.claude/scheduled-tasks", cls:"clickable", attrs:t=>`data-skill="${esc(t.path.replace(/\/SKILL\.md$/,""))}" data-title="${esc(t.name)}"`, render:t=>`
+  <div class="top"><div class="name"><code>${esc(t.name)}</code></div>${pill(t.status)}</div>
+  <div class="desc">${esc(t.desc)}</div>
+  ${kv([["Schedule",t.cron?`${esc(t.sched.label)} · <code>${esc(t.cron)}</code>`:"(run history not on disk; see static.json)"],["Last run",t.lastRun?`${fmt(t.lastRun)} (${ago(t.lastRun)})`:""],["Next run",fmt(t.nextRun)],["Prompt",`<code>${esc(t.path.replace(/^\/Users\/[^/]+/,"~"))}</code>`]])}
+  ${actions("task", t.name, t.name, t.status)}` });
+
+S.push({ title:"Session loops (/loop, CronCreate)", c:"var(--loop)", items:DATA.loops, empty:"None running. Loops live inside a session and die with it. Start one with <code>/loop 10m /some-command</code>.", render:l=>`<div class="name">${esc(l.name)}</div>` });
+
+S.push({ title:"Your skills", c:"var(--skill)", items:DATA.personal_skills, src:"~/.claude/skills", howto:"Click a skill to read its SKILL.md and see the files inside.", cls:"clickable", attrs:s=>`data-skill="${esc(s.path)}" data-title="${esc(s.name)}" data-node="skill:${esc(s.name)}"`, render:s=>`
+  <div class="top"><div class="name"><code>${esc(s.name)}</code></div><span class="pill ok">${esc(s.invoke)}</span></div>
+  <div class="desc">${esc(s.desc.slice(0,260))}${s.desc.length>260?"…":""}</div>` });
+S.push({ title:"Global instruction files", c:"var(--mcp)", items:DATA.instructions, src:"~/.claude/*.md", howto:"Always loaded, every session. CLAUDE.md @imports the other four. Click one to read it.", cls:"clickable", attrs:i=>`data-skill="${esc(i.dir)}" data-file="${esc(i.file)}" data-title="${esc(i.name)}" data-node="file:${esc(i.name)}"`, render:i=>`
+  <div class="name"><code>${esc(i.name)}</code></div><div class="desc">${esc(i.desc)} · ${i.lines} lines</div>` });
+
+S.push({ title:"Plugins", c:"var(--plugin)", items:DATA.plugins, src:"~/.claude/plugins", render:p=>`
+  <div class="top"><div class="name">${esc(p.name)} <span class="sub">v${esc(p.version)}</span></div>${pill(p.status)}</div>
+  <div class="desc">${esc(p.desc)}${p.desc.length>=220?"…":""}</div>
+  ${kv([["Marketplace",esc(p.market)],["Updated",esc(p.updated)],["Skills",p.skills.length]])}
+  ${p.skills.length?`<details><summary>${p.skills.length} skill${p.skills.length===1?"":"s"} — click one to read it</summary><ul>${p.skills.map(s=>`<li class="clickable" data-skill="${esc(s.path)}" data-title="${esc(s.name)}" data-node="pskill:${esc(p.name)}/${esc(s.name)}" title="${esc(s.desc)}"><code>${esc(s.name)}</code></li>`).join("")}</ul></details>`:""}
+  ${p.extra?`<div class="desc">${esc(p.extra)}</div>`:""}` });
+
+S.push({ title:"claude.ai skills (synced)", c:"var(--skill)", items:DATA.claude_ai_skills, src:"~/.claude/skills/synced", cls:"clickable", attrs:s=>s.path?`data-skill="${esc(s.path)}" data-title="${esc(s.name)}" data-node="synced:${esc(s.name)}"`:"", render:s=>`
+  <div class="top"><div class="name">${esc(s.name)}</div>${s.invoke?`<span class="pill ok">${esc(s.invoke)}</span>`:""}</div><div class="desc">${esc(s.desc)}</div>` });
+
+S.push({ title:"Built-in Claude Code skills", c:"var(--skill)", items:DATA.builtin_skills, src:"static.json", render:s=>`
+  <div class="top"><div class="name">${esc(s.name)}</div>${s.invoke?`<span class="pill ok">${esc(s.invoke)}</span>`:""}</div><div class="desc">${esc(s.desc)}</div>` });
+
+S.push({ title:"Hooks", c:"var(--hook)", items:DATA.hooks, src:"settings.json + plugins", render:h=>`
+  <div class="name">${esc(h.name)}</div>${h.desc?`<div class="desc">${esc(h.desc)}</div>`:""}
+  ${kv([["Command",`<code>${esc(h.cmd)}</code>`],["Defined in",`<code>${esc(h.where)}</code>`]])}` });
+
+
+S.push({ title:"MCP connectors", c:"var(--mcp)", items:DATA.connectors, src:"static.json + ~/.claude.json", render:c=>`
+  <div class="top"><div class="name">${esc(c.name)}</div>${pill(c.status)}</div>${c.note?`<div class="desc">${esc(c.note)}</div>`:""}` });
+
+$("#sections").innerHTML = S.map(s=>`
+  <h2><span class="dot" style="--c:${s.c}"></span>${s.title}<span class="cnt">${s.items.length}</span>${s.src?`<span class="src">source: ${esc(s.src)}</span>`:""}</h2>
+  ${s.howto?`<div class="howto">${s.howto}</div>`:""}
+  ${s.items.length ? `<div class="grid">${s.items.map(it=>`<div class="card ${s.cls||""}" style="--c:${s.c}" ${s.attrs?s.attrs(it):""} data-text="${esc(JSON.stringify(it).toLowerCase())}">${s.render(it)}</div>`).join("")}</div>` : `<div class="empty">${s.empty||"None."}</div>`}`).join("");
+
+// ---------- skill drawer ----------
+function md(src){
+  // Tiny Markdown renderer: frontmatter, headings, fenced code, lists, quotes, tables, hr, bold/italic/code/links.
+  let fm = "";
+  const fmm = src.match(/^---\n([\s\S]*?)\n---\n?/);
+  if (fmm) { src = src.slice(fmm[0].length); fm = `<div class="fm">${fmm[1].split("\n").map(l=>{const m=l.match(/^(\w[\w-]*):\s*(.*)$/); return m?`<div><b>${esc(m[1])}</b> ${esc(m[2].replace(/^["']|["']$/g,""))}</div>`:`<div>${esc(l)}</div>`;}).join("")}</div>`; }
+  const inline = t => esc(t)
+    .replace(/`([^`]+)`/g,"<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>")
+    .replace(/(^|[^*\w])\*([^*\n]+)\*(?!\w)/g,"$1<i>$2</i>")
+    .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g,'<a href="$2" target="_blank">$1</a>');
+  const lines = src.split("\n"); let out = [], i = 0;
+  while (i < lines.length) {
+    let l = lines[i];
+    if (/^```/.test(l)) { let buf=[]; i++; while (i<lines.length && !/^```/.test(lines[i])) buf.push(lines[i++]); i++; out.push(`<pre><code>${esc(buf.join("\n"))}</code></pre>`); continue; }
+    if (/^\s*$/.test(l)) { i++; continue; }
+    let h = l.match(/^(#{1,6})\s+(.*)$/); if (h) { out.push(`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`); i++; continue; }
+    if (/^(-{3,}|\*{3,})\s*$/.test(l)) { out.push("<hr>"); i++; continue; }
+    if (/^\|/.test(l) && /^\|?\s*:?-+/.test(lines[i+1]||"")) { let rows=[l]; i+=2; while (i<lines.length && /^\|/.test(lines[i])) rows.push(lines[i++]);
+      const cells = r => r.replace(/^\||\|$/g,"").split("|").map(c=>inline(c.trim()));
+      out.push(`<table><tr>${cells(rows[0]).map(c=>`<th>${c}</th>`).join("")}</tr>${rows.slice(1).map(r=>`<tr>${cells(r).map(c=>`<td>${c}</td>`).join("")}</tr>`).join("")}</table>`); continue; }
+    if (/^>\s?/.test(l)) { let buf=[]; while (i<lines.length && /^>\s?/.test(lines[i])) buf.push(lines[i++].replace(/^>\s?/,"")); out.push(`<blockquote>${inline(buf.join(" "))}</blockquote>`); continue; }
+    let lm = l.match(/^(\s*)([-*+]|\d+[.)])\s+/);
+    if (lm) { const ord=/\d/.test(lm[2]); let items=[]; const base=lm[1].length;
+      while (i<lines.length) { const m=lines[i].match(/^(\s*)([-*+]|\d+[.)])\s+(.*)$/);
+        if (m && m[1].length===base) { items.push(m[3]); i++; }
+        else if (lines[i].trim() && (/^\s+/.test(lines[i]) && lines[i].search(/\S/)>base)) { items[items.length-1]+= " " + lines[i].trim(); i++; }
+        else break; }
+      out.push(`<${ord?"ol":"ul"}>${items.map(t=>`<li>${inline(t)}</li>`).join("")}</${ord?"ol":"ul"}>`); continue; }
+    let buf=[]; while (i<lines.length && lines[i].trim() && !/^(#{1,6}\s|```|>|\||\s*([-*+]|\d+[.)])\s)/.test(lines[i])) buf.push(lines[i++]);
+    if (!buf.length) { buf.push(l); i++; }
+    out.push(`<p>${inline(buf.join(" "))}</p>`);
+  }
+  return fm + out.join("\n");
+}
+const drawer=$("#drawer"), scrim=$("#scrim");
+let currentDir = null;
+function closeDrawer(){ drawer.classList.remove("open"); scrim.classList.remove("open"); drawer.setAttribute("aria-hidden","true"); }
+async function loadSkillFile(dir, file){
+  const c=$("#dr-content"); c.className="dr-content md"; c.innerHTML='<span class="spin"></span> loading…';
+  if (!served) { c.className="dr-content err"; c.textContent="Reading skill files needs the helper: run python3 ~/claude-dashboard/serve.py"; return; }
+  const r = await fetch(`/skill?path=${encodeURIComponent(dir)}${file?`&file=${encodeURIComponent(file)}`:""}`).then(x=>x.json()).catch(e=>({error:String(e)}));
+  if (r.error) { c.className="dr-content err"; c.textContent=r.error; return; }
+  $("#dr-path").textContent = `${r.dir.replace(/^\/Users\/[^/]+/,"~")}/${r.file}`;
+  $("#dr-files").innerHTML = `<h4>${r.files.length} file${r.files.length===1?"":"s"}</h4>` + r.files.map(f=>`<a class="f${f.rel===r.file?" active":""}" data-rel="${esc(f.rel)}">${esc(f.rel)} <small>${f.bytes>1024?Math.round(f.bytes/1024)+"k":f.bytes+"b"}</small></a>`).join("");
+  const isMd = /\.(md|markdown|txt)$/i.test(r.file);
+  c.innerHTML = (isMd ? md(r.content) : `<pre><code>${esc(r.content)}</code></pre>`) + (r.truncated ? '<p><i>(truncated)</i></p>' : "");
+  c.scrollTop = 0;
+}
+let currentNode = null;
+function openSkill(dir, title, file, nodeId){ currentDir=dir; currentNode=nodeId||null; $("#dr-title").textContent=title; $("#dr-path").textContent=dir; $("#dr-files").innerHTML=""; drawer.classList.add("open"); scrim.classList.add("open"); drawer.setAttribute("aria-hidden","false"); loadSkillFile(dir, file||null); renderFlow(nodeId); }
+function setTab(t){ drawer.classList.toggle("flow", t==="flow"); document.querySelectorAll(".dr-tabs .tab").forEach(b=>b.classList.toggle("active", b.dataset.tab===t)); }
+document.querySelectorAll(".dr-tabs .tab").forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
+
+// ---------- flow graph ----------
+const G = DATA.graph || {nodes:[], edges:[]};
+const NODE = Object.fromEntries(G.nodes.map(n=>[n.id, n]));
+const KIND = { skill:{label:"your skill", c:"var(--skill)"}, pskill:{label:"plugin skill", c:"var(--plugin)"}, synced:{label:"claude.ai skill", c:"var(--skill)"}, file:{label:"global file", c:"var(--mcp)"}, plugin:{label:"plugin", c:"var(--plugin)"} };
+function nodeTarget(n){ // how to open a graph node in the drawer
+  if (n.kind==="plugin") return null;
+  const p = n.path.replace(/\/[^/]+$/,""); return {dir:p, file:n.kind==="file"?n.name:null};
+}
+function renderFlow(id){
+  const box = $("#dr-flow");
+  if (!id || !NODE[id]) { box.innerHTML = '<div class="empty">No flow data for this item.</div>'; return; }
+  const me = NODE[id];
+  const incAll = G.edges.filter(e=>e.to===id), outAll = G.edges.filter(e=>e.from===id);
+  const outIds = new Set(outAll.map(e=>e.to));
+  // mutual: X references me AND I reference X -> one node, one double-headed edge
+  const mutual = incAll.filter(e=>outIds.has(e.from)).map(e=>({other:e.from, inEdge:e, outEdge:outAll.find(o=>o.to===e.from)}));
+  const mutualIds = new Set(mutual.map(m=>m.other));
+  const inc = incAll.filter(e=>!mutualIds.has(e.from)), out = outAll.filter(e=>!mutualIds.has(e.to));
+  const W=700, colW=210, rowH=44, top=34, gap=14;
+  const leftRows = inc.length + mutual.length + (inc.length && mutual.length ? 0.35 : 0);
+  const rows = Math.max(leftRows, out.length, 1), H = top + rows*rowH + 10;
+  const x = [10, (W-colW)/2, W-colW-10], midY = top + (rows*rowH)/2;
+  const nodeSvg = (n, px, py, isMe, cls="") => { const k=KIND[n.kind]||KIND.skill; const sub = n.kind==="pskill" ? `${n.plugin} · plugin skill` : k.label;
+    return `<g class="node${isMe?" me":""} ${cls}" data-node="${esc(n.id)}" transform="translate(${px},${py})"><rect width="${colW}" height="36" style="stroke:${k.c}"></rect><text x="10" y="16">${esc(n.name.length>26?n.name.slice(0,25)+"…":n.name)}</text><text class="sub" x="10" y="29">${esc(sub)}</text></g>`; };
+  const edgeSvg = (x1,y1,x2,y2,type,both) => `<path class="edge ${type.replace(/\s/g,"")}${both?" both":""}" marker-end="url(#arr)"${both?' marker-start="url(#arr-rev)"':""} d="M${x1},${y1} C${x1+50},${y1} ${x2-50},${y2} ${x2},${y2}"></path>`;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
+    <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker>
+          <marker id="arr-rev" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M10,0 L0,5 L10,10 z" fill="var(--accent)"/></marker></defs>
+    <text class="col-title" x="${x[0]}" y="16">${mutual.length?`mutual (${mutual.length})${inc.length?` · referenced by (${inc.length})`:""}`:`referenced by (${inc.length})`}</text><text class="col-title" x="${x[1]}" y="16">this</text><text class="col-title" x="${x[2]}" y="16">references (${out.length})</text>`;
+  let py = top;
+  mutual.forEach(m=>{ svg += edgeSvg(x[0]+colW, py+18, x[1], midY, "mutual", true) + nodeSvg(NODE[m.other], x[0], py, false, "mutual"); py += rowH; });
+  if (mutual.length && inc.length) py += rowH*0.35;
+  inc.forEach(e=>{ svg += edgeSvg(x[0]+colW, py+18, x[1], midY, e.type, false) + nodeSvg(NODE[e.from], x[0], py, false); py += rowH; });
+  out.forEach((e,i)=>{ const oy=top+i*rowH; svg += edgeSvg(x[1]+colW, midY, x[2], oy+18, e.type, false) + nodeSvg(NODE[e.to], x[2], oy, false); });
+  svg += nodeSvg(me, x[1], midY-18, true) + `</svg>`;
+  const always = me.kind==="file" ? `<div class="flow-always">Always loaded: CLAUDE.md is read at the start of every session and @imports the other four files. Skills point at these files rather than copying them.</div>`
+               : `<div class="flow-always">Loads only when invoked by name or when its description triggers. Global instruction files are always in context, so a skill that names one is leaning on rules already loaded.</div>`;
+  const row = (e, other, label) => { const n=NODE[other]; return `<div class="row"><div class="who" data-node="${esc(n.id)}">${esc(n.name)}<small>${esc(label||e.type)}${n.kind==="pskill"?" · "+esc(n.plugin):""}</small></div><div class="ctx">${esc(e.ctx||"")}</div></div>`; };
+  const mutualRows = mutual.map(m=>{ const n=NODE[m.other]; return `<div class="row mutual"><div class="who" data-node="${esc(n.id)}">${esc(n.name)}<small>⇄ mutual${n.kind==="pskill"?" · "+esc(n.plugin):""}</small></div><div class="ctx"><span class="dir">${esc(n.name)} → ${esc(me.name)}:</span> ${esc(m.inEdge.ctx||"")}\n<span class="dir">${esc(me.name)} → ${esc(n.name)}:</span> ${esc(m.outEdge.ctx||"")}</div></div>`; }).join("");
+  box.innerHTML = `<div class="flow-legend"><span><i style="background:var(--skill)"></i>your / claude.ai skill</span><span><i style="background:var(--plugin)"></i>plugin skill</span><span><i style="background:var(--mcp)"></i>global file</span><span>dashed = imports / part of</span><span><b style="color:var(--accent)">⇄</b> = mutual reference</span></div>
+    ${always}${svg}
+    <div class="flow-ctx">${mutual.length?`<h4>Mutual — each points at the other</h4>${mutualRows}`:""}
+    ${inc.length?`<h4>Referenced by — the line that mentions it</h4>${inc.map(e=>row(e,e.from)).join("")}`:""}
+    ${out.length?`<h4>References — the line where it points elsewhere</h4>${out.map(e=>row(e,e.to)).join("")}`:""}
+    ${!incAll.length&&!outAll.length?'<div class="empty">Standalone: nothing references it and it references nothing else.</div>':""}</div>`;
+}
+$("#dr-flow").addEventListener("click", e => {
+  const el = e.target.closest("[data-node]"); if (!el) return;
+  const n = NODE[el.dataset.node]; const t = n && nodeTarget(n);
+  if (!t) { toast(`${n?n.name:"?"} is a plugin container, not a file.`); return; }
+  openSkill(t.dir, n.name, t.file, n.id); setTab("flow");
+});
+document.addEventListener("click", e => {
+  if (e.target.closest("button, a[href], summary, input")) return;   // let real controls work
+  const el = e.target.closest("[data-skill]"); if (el) { e.preventDefault(); openSkill(el.dataset.skill, el.dataset.title, el.dataset.file, el.dataset.node); setTab("contents"); }
+});
+$("#dr-files").addEventListener("click", e => { const a=e.target.closest(".f"); if (a) loadSkillFile(currentDir, a.dataset.rel); });
+$("#dr-close").onclick = closeDrawer; scrim.onclick = closeDrawer;
+document.addEventListener("keydown", e => { if (e.key==="Escape") closeDrawer(); });
+
+// ---------- filter ----------
+$("#q").addEventListener("input", e => { const q=e.target.value.trim().toLowerCase(); document.querySelectorAll(".card").forEach(c=>c.classList.toggle("hide", q && !c.dataset.text.includes(q))); });
+
+// ---------- refresh buttons ----------
+const st = $("#rf-status");
+function setBusy(b, msg){ ["rf-fast","rf-full"].forEach(id=>$("#"+id).disabled=b); st.className="status"; st.innerHTML = b ? `<span class="spin"></span>${esc(msg)}` : esc(msg||""); }
+async function refresh(mode){
+  if (!served) { st.className="status err"; st.innerHTML = 'Open via the helper to refresh: run <code>python3 ~/claude-dashboard/serve.py</code>'; return; }
+  const r = await fetch(`/refresh?mode=${mode}`).then(x=>x.json()).catch(e=>({error:String(e)}));
+  if (!r.started) { st.className="status err"; st.textContent = r.reason || r.error || "could not start"; return; }
+  setBusy(true, mode==="full" ? "Refreshing… cloud listing runs a headless Claude session (1–3 min)" : "Refreshing local data…");
+  const t0 = Date.now();
+  const poll = setInterval(async () => {
+    const s = await fetch("/status").then(x=>x.json()).catch(()=>null);
+    if (!s || s.running) { if (Date.now()-t0 > 6e5) { clearInterval(poll); setBusy(false,"Timed out waiting for refresh"); st.className="status err"; } return; }
+    clearInterval(poll);
+    if (s.last && s.last.ok) { setBusy(false, `Done in ${s.last.seconds}s — reloading`); location.reload(); }
+    else { setBusy(false, `Refresh failed: ${s.last ? s.last.message : "unknown"}`); st.className="status err"; }
+  }, 1500);
+}
+$("#rf-fast").onclick = () => refresh("fast");
+$("#rf-full").onclick = () => refresh("full");
+if (!served) st.innerHTML = 'Static copy. For live Refresh, run <code>python3 ~/claude-dashboard/serve.py</code>';
+</script>
+</body>
+</html>

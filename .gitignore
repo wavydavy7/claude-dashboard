@@ -1,0 +1,8 @@
+# generated / personal state — regenerate with build.py
+dashboard.html
+routines.json
+silenced.json
+static.json
+__pycache__/
+*.pyc
+.DS_Store

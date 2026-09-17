@@ -1,0 +1,74 @@
+{
+  "_comment": "Copy to static.json and edit. Hand-maintained data the build script cannot derive from disk.",
+  "title": "My Claude setup",
+  "cloud_model": "claude-sonnet-5",
+  "routine_notes": {
+    "trig_EXAMPLE": "Free-text note shown under this routine's card, keyed by routine id."
+  },
+  "scheduled_task_cache": {
+    "example-task": {
+      "cronExpression": "0 8 * * *",
+      "schedule": "At 08:00 AM, every day",
+      "enabled": true,
+      "lastRunAt": "",
+      "nextRunAt": ""
+    }
+  },
+  "claude_ai_skills": [],
+  "builtin_skills": [
+    {
+      "name": "loop",
+      "desc": "Run a prompt or command on an interval within this session.",
+      "invoke": "/loop 5m /cmd"
+    },
+    {
+      "name": "code-review",
+      "desc": "Review a diff or PR for bugs; --comment posts inline, --fix applies.",
+      "invoke": "/code-review"
+    },
+    {
+      "name": "simplify",
+      "desc": "Reuse/simplification cleanups on changed code."
+    },
+    {
+      "name": "security-review",
+      "desc": "Security-focused review of the current diff."
+    },
+    {
+      "name": "run",
+      "desc": "Launch this project's app to see a change working."
+    },
+    {
+      "name": "dataviz",
+      "desc": "Design rules for any chart or dashboard."
+    },
+    {
+      "name": "claude-api",
+      "desc": "Reference for models, pricing, params, tool use."
+    },
+    {
+      "name": "update-config / keybindings-help / fewer-permission-prompts",
+      "desc": "Harness configuration."
+    },
+    {
+      "name": "workflow-authoring",
+      "desc": "Write multi-agent Workflow scripts."
+    },
+    {
+      "name": "init",
+      "desc": "Generate a CLAUDE.md for a codebase."
+    }
+  ],
+  "connectors": [
+    {
+      "name": "Slack",
+      "status": "on"
+    },
+    {
+      "name": "Example needing auth",
+      "status": "bad",
+      "note": "shown as a Needs-attention bullet"
+    }
+  ],
+  "extra_flags": []
+}

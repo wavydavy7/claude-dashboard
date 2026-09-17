@@ -1,0 +1,104 @@
+"""Tests for build.py / serve.py. Run: python3 -m unittest -v"""
+import json, tempfile, unittest
+from pathlib import Path
+
+import build, serve
+
+
+class TmpHome(unittest.TestCase):
+    """Point build's paths at a scratch ~/.claude so tests never touch the real one."""
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(); root = Path(self.tmp.name)
+        self.claude = root / ".claude"; (self.claude / "skills").mkdir(parents=True)
+        self.here = root / "dash"; self.here.mkdir()
+        self._saved = {k: getattr(build, k) for k in ("CLAUDE", "HERE", "ISSUES", "DISMISSED", "SILENCED")}
+        build.CLAUDE = self.claude; build.HERE = self.here
+        build.ISSUES = self.claude / "skill-issues.jsonl"; build.DISMISSED = self.claude / "skill-issues.dismissed.jsonl"
+        build.SILENCED = self.here / "silenced.json"
+    def tearDown(self):
+        for k, v in self._saved.items(): setattr(build, k, v)
+        self.tmp.cleanup()
+    def skill(self, name, body, desc="d"):
+        d = self.claude / "skills" / name; d.mkdir(parents=True, exist_ok=True)
+        (d / "SKILL.md").write_text(f"---\nname: {name}\ndescription: {desc}\n---\n{body}\n"); return d
+
+
+class Frontmatter(TmpHome):
+    def test_parses_name_and_quoted_description(self):
+        d = self.skill("alpha", "body", desc='"Does things, use when asked"')
+        self.assertEqual(build.frontmatter(d / "SKILL.md"), ("alpha", "Does things, use when asked"))
+    def test_missing_frontmatter(self):
+        p = self.claude / "x.md"; p.write_text("# no frontmatter")
+        self.assertEqual(build.frontmatter(p), (None, None))
+    def test_personal_skills_skip_synced(self):
+        self.skill("alpha", ""); (self.claude / "skills/synced/b/morning").mkdir(parents=True)
+        (self.claude / "skills/synced/b/morning/SKILL.md").write_text("---\nname: morning\ndescription: brief\n---\n")
+        self.assertEqual([s["name"] for s in build.personal_skills()], ["alpha"])
+        self.assertEqual([s["name"] for s in build.claude_ai_skills([])], ["morning"])
+
+
+class Graph(TmpHome):
+    def edges(self, personal, files=()):
+        g = build.graph(personal, [], [], list(files)); return {(e["from"], e["to"], e["type"]) for e in g["edges"]}
+    def test_hyphenated_name_matches_anywhere_and_as_invocation(self):
+        self.skill("code-davy", "Gate 8: via `/make-skill`. Also see make-skill rules."); self.skill("make-skill", "")
+        e = self.edges(build.personal_skills())
+        self.assertIn(("skill:code-davy", "skill:make-skill", "references"), e)
+    def test_single_word_name_needs_context(self):
+        self.skill("run", ""); self.skill("a", "Then run the tests.")            # plain word: no edge
+        self.skill("b", "Use the `run` skill or /run.")                         # backtick / slash: edge
+        e = self.edges(build.personal_skills())
+        self.assertNotIn(("skill:a", "skill:run", "references"), e)
+        self.assertIn(("skill:b", "skill:run", "references"), e)
+    def test_global_file_matched_via_path_and_imports_win(self):
+        (self.claude / "CLAUDE.md").write_text("@DEV-PROCESS.md\n# Rules\nSee DEV-PROCESS.md often.\n")
+        (self.claude / "DEV-PROCESS.md").write_text("# Dev Process\n")
+        self.skill("s", "Sources: `~/.claude/DEV-PROCESS.md`.")
+        instr = build.instructions(); e = self.edges(build.personal_skills(), instr)
+        self.assertIn(("skill:s", "file:DEV-PROCESS.md", "references"), e)
+        self.assertIn(("file:CLAUDE.md", "file:DEV-PROCESS.md", "imports"), e)
+        self.assertNotIn(("file:CLAUDE.md", "file:DEV-PROCESS.md", "references"), e)  # one edge per pair
+    def test_no_self_edges(self):
+        self.skill("self-ref", "This is the self-ref skill.")
+        self.assertFalse([x for x in self.edges(build.personal_skills()) if x[0] == x[1]])
+
+
+class Issues(TmpHome):
+    def test_read_sorted_and_bad_line_reported(self):
+        build.ISSUES.write_text('{"id":"a","ts":"2026-01-01T00:00:00Z","skill":"x","summary":"old"}\nnot json\n{"id":"b","ts":"2026-02-01T00:00:00Z","skill":"y","summary":"new"}\n')
+        got = build.skill_issues()
+        self.assertEqual([i["id"] for i in got][:2], ["b", "a"]); self.assertTrue(any(i["id"].startswith("bad") for i in got))
+    def test_dismiss_moves_line(self):
+        build.ISSUES.write_text('{"id":"a","skill":"x","summary":"s"}\n{"id":"b","skill":"y","summary":"t"}\n')
+        self.assertTrue(build.dismiss_issue("a")); self.assertFalse(build.dismiss_issue("zzz"))
+        self.assertEqual([i["id"] for i in build.skill_issues()], ["b"])
+        gone = json.loads(build.DISMISSED.read_text().strip()); self.assertEqual(gone["id"], "a"); self.assertIn("dismissed_at", gone)
+    def test_silence_roundtrip(self):
+        self.assertEqual(build.set_silenced("k1", True), ["k1"]); self.assertEqual(build.set_silenced("k1", True), ["k1"])
+        self.assertEqual(build.set_silenced("k1", False), []); self.assertEqual(build.silenced(), [])
+
+
+class SkillEndpoint(TmpHome):
+    def setUp(self):
+        super().setUp(); self._roots = serve.SKILL_ROOTS; self._home = serve.CLAUDE_HOME
+        serve.SKILL_ROOTS = [self.claude / "skills"]; serve.CLAUDE_HOME = self.claude.resolve()
+        self.d = self.skill("alpha", "# Alpha\n"); (self.d / "notes.md").write_text("ref")
+        (self.claude / "settings.json").write_text("{}"); (self.claude / "CLAUDE.md").write_text("# G\n")
+    def tearDown(self):
+        serve.SKILL_ROOTS = self._roots; serve.CLAUDE_HOME = self._home; super().tearDown()
+    def test_reads_skill_and_lists_files(self):
+        body, code = serve.skill_payload(str(self.d), None)
+        self.assertEqual(code, 200); self.assertEqual(body["file"], "SKILL.md"); self.assertEqual([f["rel"] for f in body["files"]], ["SKILL.md", "notes.md"])
+    def test_refuses_outside_roots_and_escapes(self):
+        self.assertEqual(serve.skill_payload(str(self.claude / "plugins"), None)[1], 403)
+        self.assertEqual(serve.skill_payload("/etc", None)[1], 403)
+        self.assertEqual(serve.skill_payload(str(self.d), "../../settings.json")[1], 404)
+    def test_claude_home_exposes_only_top_level_md(self):
+        body, code = serve.skill_payload(str(self.claude), None)
+        self.assertEqual(code, 200); self.assertEqual([f["rel"] for f in body["files"]], ["CLAUDE.md"])
+        self.assertEqual(serve.skill_payload(str(self.claude), "settings.json")[1], 404)
+        self.assertEqual(serve.skill_payload(str(self.claude), "skills/alpha/SKILL.md")[1], 404)
+
+
+if __name__ == "__main__":
+    unittest.main()
