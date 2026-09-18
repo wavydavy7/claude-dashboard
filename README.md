@@ -43,6 +43,17 @@ the files it @imports) open the same way. The helper serves files through
 `~/.claude/scheduled-tasks`, plus the top-level `*.md` files in `~/.claude`
 itself. Nothing else in `~/.claude` (settings, credentials, projects) is reachable.
 
+## Editing a skill
+
+In the drawer, **✎ Edit** turns the file into a text editor; **Save** (or ⌘S)
+writes it back through the helper. Writable: your own skills under
+`~/.claude/skills`, scheduled tasks, and the top-level `~/.claude/*.md` files.
+Plugin-cache and synced claude.ai skills are read-only, because a plugin update
+overwrites them. Each save keeps the previous version in `backups/` (last 20 per
+file) and, for `SKILL.md`, checks the frontmatter: name must equal the folder,
+description required and ≤1024 chars; line and word budgets are warnings.
+Creating or deleting files is not supported here.
+
 ## Flow tab
 
 The drawer has a second tab, **Flow**, showing how the item connects to the
@@ -78,7 +89,7 @@ and rebuilds, so nothing is lost.
 
 | file | purpose |
 |---|---|
-| `serve.py` | local HTTP helper: serves the page, handles `/refresh`, `/status`, `/skill`, `/issue/dismiss`, `/flag/silence`, `/flag/unsilence` |
+| `serve.py` | local HTTP helper: serves the page, handles `/refresh`, `/status`, `/skill`, `/issue/dismiss`, `/flag/silence`, `/flag/unsilence`, `POST /skill/save` |
 | `build.py` | collects data and injects it into `template.html` → `dashboard.html` |
 | `template.html` | the page (CSS + render code); `/*__DATA__*/{}` is the injection point |
 | `cloud-prompt.txt` | the prompt `claude -p` runs to list routines |
@@ -86,6 +97,7 @@ and rebuilds, so nothing is lost.
 | `test_build.py` | unit tests for the builder, graph matcher, issue/silence state, and `/skill` path guards |
 | `routines.json` | cache written by the cloud refresh |
 | `silenced.json` | keys of Needs-attention bullets you have silenced |
+| `backups/` | git-ignored; previous versions of files saved from the editor |
 | `dashboard.html` | generated output; do not edit by hand |
 
 ## Command line

@@ -9,6 +9,8 @@
   GET /issue/dismiss?id=<id>           move a logged skill issue to the dismissed file, rebuild
   GET /flag/silence?key=<k>            hide a computed Needs-attention bullet (silenced.json), rebuild
   GET /flag/unsilence?key=<k>          show it again
+  POST /skill/save  {dir, file, content}   write a file you own (your skills, scheduled tasks, ~/.claude/*.md);
+                                            plugin-cache skills are read-only. Backs up the old version, validates, rebuilds.
 """
 import json, sys, threading, time, urllib.parse, webbrowser
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
@@ -21,6 +23,32 @@ state = {"running": False, "last": None}
 # Only these roots may be read through /skill. Everything else is refused.
 SKILL_ROOTS = [Path.home() / ".claude/skills", Path.home() / ".claude/plugins/cache", Path.home() / ".claude/scheduled-tasks"]
 MAX_FILE = 400_000
+# Writable: your own skills (not the synced mirror), scheduled tasks, and top-level ~/.claude/*.md. Never the plugin cache.
+WRITE_ROOTS = [Path.home() / ".claude/skills", Path.home() / ".claude/scheduled-tasks"]
+BACKUPS = HERE / "backups"
+
+def is_writable(target):
+    t = target.resolve(); home = CLAUDE_HOME
+    if t.parent == home and t.suffix == ".md": return True
+    if (home / "skills/synced").resolve() in t.parents: return False
+    return any(r.resolve() in t.parents for r in WRITE_ROOTS)
+
+def save_payload(dir_s, rel, content):
+    d = Path(dir_s).expanduser().resolve(); target = (d / (rel or "SKILL.md")).resolve()
+    if d not in target.parents: return {"error": "bad file path"}, 400
+    if not target.is_file(): return {"error": "file does not exist; creating files is not supported here"}, 404
+    if not is_writable(target): return {"error": "read-only: plugin-cache and synced skills are overwritten on update; edit them upstream"}, 403
+    if len(content.encode()) > MAX_FILE: return {"error": "content too large"}, 413
+    errors, warnings = ([], [])
+    if target.name == "SKILL.md": errors, warnings = build.validate_skill(content, target.parent.name)
+    if errors: return {"error": "; ".join(errors), "errors": errors, "warnings": warnings}, 422
+    BACKUPS.mkdir(exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M%S"); bak = BACKUPS / f"{stamp}__{target.parent.name}__{target.name}"
+    bak.write_bytes(target.read_bytes()); target.write_text(content)
+    keep = sorted(BACKUPS.glob(f"*__{target.parent.name}__{target.name}"))[:-20]
+    for old in keep: old.unlink()
+    build.build()
+    return {"ok": True, "path": str(target), "backup": str(bak), "warnings": warnings}, 200
 
 CLAUDE_HOME = (Path.home() / ".claude").resolve()
 
@@ -44,7 +72,7 @@ def skill_payload(dir_s, rel):
         content, truncated = target.read_text(errors="replace")[:MAX_FILE], True
     else:
         content, truncated = target.read_text(errors="replace"), False
-    return {"dir": str(d), "file": str(target.relative_to(d)), "files": files, "content": content, "truncated": truncated}, 200
+    return {"dir": str(d), "file": str(target.relative_to(d)), "files": files, "content": content, "truncated": truncated, "writable": is_writable(target)}, 200
 lock = threading.Lock()
 
 def do_refresh(mode):
@@ -92,6 +120,15 @@ class H(SimpleHTTPRequestHandler):
             threading.Thread(target=do_refresh, args=(mode,), daemon=True).start()
             return self.send_json({"started": True, "mode": mode})
         return super().do_GET()
+    def do_POST(self):
+        u = urllib.parse.urlparse(self.path)
+        if u.path != "/skill/save": return self.send_json({"error": "not found"}, 404)
+        n = int(self.headers.get("Content-Length") or 0)
+        if n > MAX_FILE + 10_000: return self.send_json({"error": "too large"}, 413)
+        try: body = json.loads(self.rfile.read(n).decode())
+        except (json.JSONDecodeError, UnicodeDecodeError): return self.send_json({"error": "invalid JSON"}, 400)
+        out, code = save_payload(body.get("dir", ""), body.get("file"), body.get("content", ""))
+        return self.send_json(out, code)
     def end_headers(self):
         if self.path.endswith(".html"): self.send_header("Cache-Control", "no-store")
         super().end_headers()

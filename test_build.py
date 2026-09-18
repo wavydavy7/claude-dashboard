@@ -102,3 +102,43 @@ class SkillEndpoint(TmpHome):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Validate(unittest.TestCase):
+    def test_good_skill_passes(self):
+        e, w = build.validate_skill("---\nname: alpha\ndescription: does x, use when y\n---\n# Alpha\n", "alpha")
+        self.assertEqual((e, w), ([], []))
+    def test_name_must_match_folder(self):
+        e, _ = build.validate_skill("---\nname: beta\ndescription: d\n---\n", "alpha"); self.assertTrue(any("must equal the folder" in x for x in e))
+    def test_missing_frontmatter_blocks(self):
+        e, _ = build.validate_skill("# no frontmatter\n", "alpha"); self.assertTrue(e)
+    def test_budget_is_warning_not_error(self):
+        e, w = build.validate_skill("---\nname: alpha\ndescription: d\n---\n" + "line\n" * 130, "alpha")
+        self.assertEqual(e, []); self.assertTrue(any("lines" in x for x in w))
+
+
+class Save(TmpHome):
+    def setUp(self):
+        super().setUp(); self._r = (serve.SKILL_ROOTS, serve.WRITE_ROOTS, serve.CLAUDE_HOME, serve.BACKUPS)
+        serve.SKILL_ROOTS = [self.claude / "skills"]; serve.WRITE_ROOTS = [self.claude / "skills"]; serve.CLAUDE_HOME = self.claude.resolve(); serve.BACKUPS = self.here / "backups"
+        self.d = self.skill("alpha", "# v1")
+        (self.claude / "skills/synced/b/pdf").mkdir(parents=True); (self.claude / "skills/synced/b/pdf/SKILL.md").write_text("---\nname: pdf\ndescription: d\n---\n")
+        (self.claude / "CLAUDE.md").write_text("# G\n"); (self.claude / "settings.json").write_text("{}")
+        (self.claude / "template.html").write_text("x"); build.TEMPLATE = self.claude / "template.html"; build.OUT = self.here / "dashboard.html"
+    def tearDown(self):
+        serve.SKILL_ROOTS, serve.WRITE_ROOTS, serve.CLAUDE_HOME, serve.BACKUPS = self._r; super().tearDown()
+    def test_saves_with_backup(self):
+        new = "---\nname: alpha\ndescription: d\n---\n# v2\n"
+        out, code = serve.save_payload(str(self.d), "SKILL.md", new)
+        self.assertEqual(code, 200, out); self.assertEqual((self.d / "SKILL.md").read_text(), new)
+        self.assertIn("# v1", Path(out["backup"]).read_text())
+    def test_rejects_bad_frontmatter(self):
+        out, code = serve.save_payload(str(self.d), "SKILL.md", "---\nname: wrong\ndescription: d\n---\n")
+        self.assertEqual(code, 422); self.assertIn("# v1", (self.d / "SKILL.md").read_text())
+    def test_synced_and_settings_are_read_only(self):
+        self.assertEqual(serve.save_payload(str(self.claude / "skills/synced/b/pdf"), "SKILL.md", "---\nname: pdf\ndescription: d\n---\n")[1], 403)
+        self.assertEqual(serve.save_payload(str(self.claude), "settings.json", "{}")[1], 403)
+        self.assertEqual(serve.save_payload(str(self.d), "../../settings.json", "{}")[1], 400)
+    def test_global_md_writable_no_create(self):
+        self.assertEqual(serve.save_payload(str(self.claude), "CLAUDE.md", "# G2\n")[1], 200)
+        self.assertEqual(serve.save_payload(str(self.claude), "NEW.md", "x")[1], 404)

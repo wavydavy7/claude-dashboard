@@ -137,7 +137,15 @@
   .md .fm { background:var(--accent-bg); border-radius:8px; padding:8px 12px; font-size:12px; margin-bottom:10px; }
   .md .fm b { display:inline-block; min-width:90px; color:var(--accent); }
   .dr-content.err { color:var(--bad); }
-  .dr-tabs { display:flex; gap:4px; margin-left:16px; }
+  .dr-tabs { display:flex; gap:4px; margin-left:16px; align-items:center; }
+  .dr-tabs .edit { margin-left:10px; }
+  .dr-tabs .save { background:var(--ok-bg); color:var(--ok); border-color:transparent; }
+  .editor { display:none; flex:1; min-height:0; flex-direction:column; }
+  .drawer.editing .dr-content { display:none; } .drawer.editing .editor { display:flex; }
+  .editor textarea { flex:1; width:100%; border:none; resize:none; padding:14px 18px; font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; background:var(--card); color:var(--ink); outline:none; tab-size:2; }
+  .editor .bar { border-top:1px solid var(--line); padding:6px 14px; font-size:12px; color:var(--muted); display:flex; gap:12px; align-items:center; min-height:30px; }
+  .editor .bar .err { color:var(--bad); } .editor .bar .warn { color:var(--warn); }
+  .ro { font-size:11px; color:var(--muted); margin-left:8px; }
   .dr-tabs .tab { border:1px solid var(--line); background:var(--chip); color:var(--muted); border-radius:7px; padding:4px 11px; font-size:12px; cursor:pointer; font-family:inherit; }
   .dr-tabs .tab.active { background:var(--accent-bg); color:var(--accent); border-color:transparent; }
   .dr-flow { display:none; overflow:auto; padding:14px 18px 30px; }
@@ -200,9 +208,11 @@
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" aria-hidden="true">
   <div class="dr-head"><div><h3 id="dr-title"></h3><div class="path" id="dr-path"></div></div>
-    <div class="dr-tabs"><button class="tab active" data-tab="contents">Contents</button><button class="tab" data-tab="flow">Flow</button></div>
+    <div class="dr-tabs"><button class="tab active" data-tab="contents">Contents</button><button class="tab" data-tab="flow">Flow</button>
+      <button class="btn edit" id="dr-edit" style="display:none">✎ Edit</button><button class="btn save" id="dr-save" style="display:none">Save ⌘S</button><button class="btn" id="dr-cancel" style="display:none">Cancel</button><span class="ro" id="dr-ro"></span></div>
     <button class="dr-close" id="dr-close" title="Close (Esc)">×</button></div>
-  <div class="dr-body"><nav class="dr-files" id="dr-files"></nav><div class="dr-content md" id="dr-content"></div></div>
+  <div class="dr-body"><nav class="dr-files" id="dr-files"></nav><div class="dr-content md" id="dr-content"></div>
+    <div class="editor" id="dr-editor"><textarea id="dr-text" spellcheck="false"></textarea><div class="bar" id="dr-bar"></div></div></div>
   <div class="dr-flow flow" id="dr-flow"></div>
 </aside>
 <footer>
@@ -428,12 +438,34 @@ async function loadSkillFile(dir, file){
   const r = await fetch(`/skill?path=${encodeURIComponent(dir)}${file?`&file=${encodeURIComponent(file)}`:""}`).then(x=>x.json()).catch(e=>({error:String(e)}));
   if (r.error) { c.className="dr-content err"; c.textContent=r.error; return; }
   $("#dr-path").textContent = `${r.dir.replace(/^\/Users\/[^/]+/,"~")}/${r.file}`;
+  currentFile = r.file; currentContent = r.content; setEditing(false);
+  $("#dr-edit").dataset.can = r.writable ? "1" : "0"; $("#dr-edit").style.display = r.writable ? "" : "none"; $("#dr-ro").textContent = r.writable ? "" : (r.dir.includes("/plugins/cache/") ? "read-only: plugin skill, edit upstream" : r.dir.includes("/synced/") ? "read-only: synced from claude.ai" : "read-only");
   $("#dr-files").innerHTML = `<h4>${r.files.length} file${r.files.length===1?"":"s"}</h4>` + r.files.map(f=>`<a class="f${f.rel===r.file?" active":""}" data-rel="${esc(f.rel)}">${esc(f.rel)} <small>${f.bytes>1024?Math.round(f.bytes/1024)+"k":f.bytes+"b"}</small></a>`).join("");
   const isMd = /\.(md|markdown|txt)$/i.test(r.file);
   c.innerHTML = (isMd ? md(r.content) : `<pre><code>${esc(r.content)}</code></pre>`) + (r.truncated ? '<p><i>(truncated)</i></p>' : "");
   c.scrollTop = 0;
 }
-let currentNode = null;
+let currentNode = null, currentFile = null, currentContent = "";
+function setEditing(on){
+  drawer.classList.toggle("editing", on);
+  $("#dr-save").style.display = on ? "" : "none"; $("#dr-cancel").style.display = on ? "" : "none";
+  $("#dr-edit").style.display = on ? "none" : ($("#dr-edit").dataset.can==="1" ? "" : "none");
+  if (on) { $("#dr-text").value = currentContent; $("#dr-bar").innerHTML = `Editing <code>${esc(currentFile)}</code>. A backup is kept in ~/claude-dashboard/backups/. SKILL.md saves are checked against make-skill rules.`; $("#dr-text").focus(); }
+}
+async function saveEdit(){
+  const content = $("#dr-text").value; const bar = $("#dr-bar");
+  if (content === currentContent) { setEditing(false); return; }
+  bar.innerHTML = '<span class="spin"></span> saving…';
+  const r = await fetch("/skill/save", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({dir: currentDir, file: currentFile, content})}).then(x=>x.json()).catch(e=>({error:String(e)}));
+  if (!r.ok) { bar.innerHTML = `<span class="err">Not saved: ${esc(r.error||"unknown error")}</span>`; return; }
+  currentContent = content; setEditing(false);
+  const c = $("#dr-content"); c.innerHTML = /\.(md|markdown|txt)$/i.test(currentFile) ? md(content) : `<pre><code>${esc(content)}</code></pre>`;
+  toast(r.warnings && r.warnings.length ? `Saved with warnings: ${r.warnings.join("; ")}` : "Saved. Press Refresh to update counts and the flow graph.");
+}
+$("#dr-edit").onclick = () => setEditing(true);
+$("#dr-cancel").onclick = () => setEditing(false);
+$("#dr-save").onclick = saveEdit;
+$("#dr-text").addEventListener("keydown", e => { if ((e.metaKey||e.ctrlKey) && e.key.toLowerCase()==="s") { e.preventDefault(); saveEdit(); } if (e.key==="Escape") { e.stopPropagation(); setEditing(false); } });
 function openSkill(dir, title, file, nodeId){ currentDir=dir; currentNode=nodeId||null; $("#dr-title").textContent=title; $("#dr-path").textContent=dir; $("#dr-files").innerHTML=""; drawer.classList.add("open"); scrim.classList.add("open"); drawer.setAttribute("aria-hidden","false"); loadSkillFile(dir, file||null); renderFlow(nodeId); }
 function setTab(t){ drawer.classList.toggle("flow", t==="flow"); document.querySelectorAll(".dr-tabs .tab").forEach(b=>b.classList.toggle("active", b.dataset.tab===t)); }
 document.querySelectorAll(".dr-tabs .tab").forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
@@ -496,7 +528,7 @@ document.addEventListener("click", e => {
 });
 $("#dr-files").addEventListener("click", e => { const a=e.target.closest(".f"); if (a) loadSkillFile(currentDir, a.dataset.rel); });
 $("#dr-close").onclick = closeDrawer; scrim.onclick = closeDrawer;
-document.addEventListener("keydown", e => { if (e.key==="Escape") closeDrawer(); });
+document.addEventListener("keydown", e => { if (e.key==="Escape" && !drawer.classList.contains("editing")) closeDrawer(); });
 
 // ---------- filter ----------
 $("#q").addEventListener("input", e => { const q=e.target.value.trim().toLowerCase(); document.querySelectorAll(".card").forEach(c=>c.classList.toggle("hide", q && !c.dataset.text.includes(q))); });
