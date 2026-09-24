@@ -265,7 +265,7 @@ def graph(personal, plugs, synced, instr):
     pats = {n["name"]: pattern(n["name"], n["kind"]) for n in nodes}
     edges, seen = [], set()
     def emit(frm, to, typ, ctx=""):
-        k = (frm, to)  # one edge per pair; imports/membership are emitted first and win over plain references
+        k = (frm, to)  # one edge per pair; declared/imports/membership are emitted first and win over mentions
         if k in seen or frm == to: return
         seen.add(k); edges.append({"from": frm, "to": to, "type": typ, "ctx": ctx.strip()[:160]})
     for n in nodes:
@@ -276,14 +276,37 @@ def graph(personal, plugs, synced, instr):
         if n["kind"] == "file":
             for imp in re.findall(r"^@(\S+\.md)", text, re.M):
                 for t in resolve(imp, n["id"]): emit(n["id"], t, "imports", f"@{imp}")
+        # 1) declared dependencies: bullets under "## Works with" (see ~/.claude/SKILL-CONNECTIONS.md)
+        for line, name in works_with(text):
+            for t in resolve(name, n["id"]): emit(n["id"], t, "works with", line)
+        # 2) undeclared mentions anywhere else in the body
         body = re.sub(r"^---\n.*?\n---\n", "", text, count=1, flags=re.S) if n["kind"] != "file" else text
+        body = strip_works_with(body)
         for line in body.split("\n"):
             for name, pat in pats.items():
                 if name == n["name"] or not pat.search(line): continue
                 for t in resolve(name, n["id"]):
                     if t.startswith("plugin:") and n["kind"] == "pskill" and n["plugin"] == name: continue
-                    emit(n["id"], t, "references", line)
+                    emit(n["id"], t, "mention", line)
     return {"nodes": nodes, "edges": edges}
+
+def works_with_section(text):
+    """Return the body of the '## Works with' section (up to the next heading), or ''."""
+    m = re.search(rf"^{re.escape(CONNECT_HEADING)}\s*$\n(.*?)(?=^#{{1,6}}\s|\Z)", text, re.M | re.S)
+    return m.group(1) if m else ""
+
+def strip_works_with(text):
+    return re.sub(rf"^{re.escape(CONNECT_HEADING)}\s*$\n.*?(?=^#{{1,6}}\s|\Z)", "", text, flags=re.M | re.S)
+
+def works_with(text):
+    """Yield (bullet_line, referenced_name) for each bullet in the Works-with section.
+    The name is the first backticked token, with any 'plugin/' or 'plugin:' prefix removed."""
+    for line in works_with_section(text).splitlines():
+        if not line.lstrip().startswith(("-", "*")): continue
+        m = re.search(r"`([^`]+)`", line)
+        if not m: continue
+        name = m.group(1).strip().split("/")[-1].split(":")[-1]
+        yield line.strip(), name
 
 def build():
     settings = read_json(CLAUDE / "settings.json", {})

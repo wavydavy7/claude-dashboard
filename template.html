@@ -127,6 +127,7 @@
   .cn-svg { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:1; overflow:visible; }
   .cn-svg .old { fill:none; stroke:var(--muted); stroke-width:1.2; opacity:.3; }
   .cn-svg .old.both { stroke:var(--accent); opacity:.5; }
+  .cn-svg .old.mention { stroke-dasharray:2 4; opacity:.2; }
   .cn-svg .new { fill:none; stroke:var(--accent); stroke-width:2.2; stroke-dasharray:6 4; }
   .cn-col.plugins .cn-node { padding:5px 10px; font-size:12px; margin-bottom:5px; }
   .cn-col .grp { color:var(--muted); font-size:11px; margin:8px 0 4px; }
@@ -199,6 +200,9 @@
   .flow .node:hover rect { filter:brightness(1.08); stroke-width:2.5; }
   .flow .edge { fill:none; stroke:var(--muted); stroke-width:1.4; opacity:.55; }
   .flow .edge.imports, .flow .edge.partof { stroke-dasharray:4 3; }
+  .flow .edge.workswith { stroke:var(--skill); stroke-width:2; opacity:.9; }
+  .flow .edge.mention { opacity:.3; stroke-dasharray:2 4; }
+  .flow-ctx .row.mention .who small { color:var(--warn); }
   .flow .edge.both { stroke:var(--accent); stroke-width:2; opacity:.85; }
   .flow .node.mutual rect { stroke-width:2.5; stroke-dasharray:none; }
   .flow-ctx .row.mutual .who { color:var(--accent); }
@@ -326,6 +330,7 @@ R.filter(r=>r.last_run_status && !/SUCCEEDED/.test(r.last_run_status)).forEach(r
 T.filter(t=>t.status==="warn").forEach(t=>F(`task-stale:${t.name}:${t.lastRun}`, `<b>${esc(t.name)}</b> last ran ${ago(t.lastRun)}. Local tasks only fire while Claude Code is open.`));
 DATA.connectors.filter(c=>c.status!=="on"&&c.note).forEach(c=>F(`connector:${c.name}`, `<b>${esc(c.name)}</b>: ${esc(c.note)}`));
 DATA.extra_flags.forEach((f,i)=>F(`extra:${f.replace(/<[^>]+>/g,"").slice(0,60)}`, f));
+(DATA.graph.edges||[]).filter(e=>e.type==="mention" && e.from.startsWith("skill:") && !e.to.startsWith("plugin:") && !e.to.startsWith("file:")).forEach(e=>{ const a=NODE[e.from], b=NODE[e.to]; if(a&&b) F(`undeclared:${e.from}:${e.to}`, `<b>${esc(a.name)}</b> mentions <code>${esc(b.name)}</code> but has no <code>## Works with</code> entry for it. <span class="skill" data-skillname="${esc(a.name)}" style="cursor:pointer;text-decoration:underline dotted">open</span>`); });
 const SIL = new Set(DATA.silenced || []);
 const shown = flags.filter(f=>!SIL.has(f.key)), hidden = flags.filter(f=>SIL.has(f.key));
 const ISSUES = DATA.issues || [];
@@ -557,9 +562,9 @@ function renderFlow(id){
   svg += nodeSvg(me, x[1], midY-18, true) + `</svg>`;
   const always = me.kind==="file" ? `<div class="flow-always">Always loaded: CLAUDE.md is read at the start of every session and @imports the other four files. Skills point at these files rather than copying them.</div>`
                : `<div class="flow-always">Loads only when invoked by name or when its description triggers. Global instruction files are always in context, so a skill that names one is leaning on rules already loaded.</div>`;
-  const row = (e, other, label) => { const n=NODE[other]; return `<div class="row"><div class="who" data-node="${esc(n.id)}">${esc(n.name)}<small>${esc(label||e.type)}${n.kind==="pskill"?" · "+esc(n.plugin):""}</small></div><div class="ctx">${esc(e.ctx||"")}</div></div>`; };
+  const row = (e, other, label) => { const n=NODE[other]; const t = e.type==="mention" ? "undeclared mention" : e.type; return `<div class="row ${e.type==="mention"?"mention":""}"><div class="who" data-node="${esc(n.id)}">${esc(n.name)}<small>${esc(label||t)}${n.kind==="pskill"?" · "+esc(n.plugin):""}</small></div><div class="ctx">${esc(e.ctx||"")}</div></div>`; };
   const mutualRows = mutual.map(m=>{ const n=NODE[m.other]; return `<div class="row mutual"><div class="who" data-node="${esc(n.id)}">${esc(n.name)}<small>⇄ mutual${n.kind==="pskill"?" · "+esc(n.plugin):""}</small></div><div class="ctx"><span class="dir">${esc(n.name)} → ${esc(me.name)}:</span> ${esc(m.inEdge.ctx||"")}\n<span class="dir">${esc(me.name)} → ${esc(n.name)}:</span> ${esc(m.outEdge.ctx||"")}</div></div>`; }).join("");
-  box.innerHTML = `<div class="flow-legend"><span><i style="background:var(--skill)"></i>your / claude.ai skill</span><span><i style="background:var(--plugin)"></i>plugin skill</span><span><i style="background:var(--mcp)"></i>global file</span><span>dashed = imports / part of</span><span><b style="color:var(--accent)">⇄</b> = mutual reference</span></div>
+  box.innerHTML = `<div class="flow-legend"><span><i style="background:var(--skill)"></i>your / claude.ai skill</span><span><i style="background:var(--plugin)"></i>plugin skill</span><span><i style="background:var(--mcp)"></i>global file</span><span><i style="background:var(--skill)"></i>solid = declared in <code>## Works with</code></span><span>faint dotted = undeclared mention</span><span>dashed = imports / part of</span><span><b style="color:var(--accent)">⇄</b> = mutual</span></div>
     ${always}${svg}
     <div class="flow-ctx">${mutual.length?`<h4>Mutual — each points at the other</h4>${mutualRows}`:""}
     ${inc.length?`<h4>Referenced by — the line that mentions it</h4>${inc.map(e=>row(e,e.from)).join("")}`:""}
@@ -604,7 +609,7 @@ function drawExisting(){
   let out = "";
   G.edges.filter(e=>e.type!=="part of").forEach(e=>{ const a=pos(e.from), b=pos(e.to); if(!a||!b) return; const both = pairs.has(e.to+"→"+e.from); if (both && e.from > e.to) return;
     const A=center(a.el,"r"), B=center(b.el,"l"); const ax=A.x>B.x?center(a.el,"l"):A, bx=A.x>B.x?center(b.el,"r"):B;
-    out += `<path class="old${both?" both":""}" d="${curve(ax,bx)}"></path>`; });
+    out += `<path class="old${both?" both":""}${e.type==="mention"?" mention":""}" d="${curve(ax,bx)}"></path>`; });
   cnSvg.innerHTML = out + '<path class="new" id="cn-live" d=""></path>';
 }
 let drag = null;

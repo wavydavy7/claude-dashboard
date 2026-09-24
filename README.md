@@ -73,11 +73,19 @@ rest of your setup: what references it (left), the item (center), what it
 references (right). Below the graph, each edge shows the exact line that made
 the connection. Click any node to walk to it.
 
-Edges are found by scanning each SKILL.md and global file for other items'
-names. Hyphenated names match anywhere; single-word names (`run`, `loop`,
-`handoff`) only count as `/name`, `` `name` ``, or "name skill" to avoid hits
-on ordinary words. CLAUDE.md `@imports` and plugin membership are dashed.
-Heuristic, not semantic: it catches mentions, not runtime calls.
+Edges come from two sources. **Declared** (solid): bullets under a
+`## Works with` section in the skill, one per dependency, with the other
+skill's name in backticks — the convention in `SKILL-CONNECTIONS.md` (an
+example global rule file; see below). **Mentions** (faint dotted): any other
+place the text names another item. Hyphenated names match anywhere;
+single-word names (`run`, `loop`) only count as `/name`, `` `name` ``, or
+"name skill". A mention of another skill with no matching declaration is
+listed under Needs attention as undeclared. CLAUDE.md `@imports` and plugin
+membership are dashed.
+
+To adopt the convention, add a global instruction file telling Claude to
+declare dependencies under `## Works with` at the moment it creates them, and
+`@import` it from `~/.claude/CLAUDE.md`. The Connect tool writes in that format.
 
 ## Silencing Needs-attention bullets
 

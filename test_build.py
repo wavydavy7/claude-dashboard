@@ -43,21 +43,21 @@ class Graph(TmpHome):
     def test_hyphenated_name_matches_anywhere_and_as_invocation(self):
         self.skill("code-davy", "Gate 8: via `/make-skill`. Also see make-skill rules."); self.skill("make-skill", "")
         e = self.edges(build.personal_skills())
-        self.assertIn(("skill:code-davy", "skill:make-skill", "references"), e)
+        self.assertIn(("skill:code-davy", "skill:make-skill", "mention"), e)
     def test_single_word_name_needs_context(self):
         self.skill("run", ""); self.skill("a", "Then run the tests.")            # plain word: no edge
         self.skill("b", "Use the `run` skill or /run.")                         # backtick / slash: edge
         e = self.edges(build.personal_skills())
-        self.assertNotIn(("skill:a", "skill:run", "references"), e)
-        self.assertIn(("skill:b", "skill:run", "references"), e)
+        self.assertNotIn(("skill:a", "skill:run", "mention"), e)
+        self.assertIn(("skill:b", "skill:run", "mention"), e)
     def test_global_file_matched_via_path_and_imports_win(self):
         (self.claude / "CLAUDE.md").write_text("@DEV-PROCESS.md\n# Rules\nSee DEV-PROCESS.md often.\n")
         (self.claude / "DEV-PROCESS.md").write_text("# Dev Process\n")
         self.skill("s", "Sources: `~/.claude/DEV-PROCESS.md`.")
         instr = build.instructions(); e = self.edges(build.personal_skills(), instr)
-        self.assertIn(("skill:s", "file:DEV-PROCESS.md", "references"), e)
+        self.assertIn(("skill:s", "file:DEV-PROCESS.md", "mention"), e)
         self.assertIn(("file:CLAUDE.md", "file:DEV-PROCESS.md", "imports"), e)
-        self.assertNotIn(("file:CLAUDE.md", "file:DEV-PROCESS.md", "references"), e)  # one edge per pair
+        self.assertNotIn(("file:CLAUDE.md", "file:DEV-PROCESS.md", "mention"), e)  # one edge per pair
     def test_no_self_edges(self):
         self.skill("self-ref", "This is the self-ref skill.")
         self.assertFalse([x for x in self.edges(build.personal_skills()) if x[0] == x[1]])
@@ -160,3 +160,15 @@ class Connect(unittest.TestCase):
     def test_idempotent_section_count(self):
         new, _ = build.add_connection(self.base, "x", "one"); new, _ = build.add_connection(new, "y", "two")
         self.assertEqual(new.count("## Works with"), 1)
+
+
+class WorksWith(TmpHome):
+    def test_declared_edge_wins_and_mentions_are_separate(self):
+        self.skill("a", "Step: call `b` here.\n\n## Works with\n- `c` — invoke before step 1.\n"); self.skill("b", ""); self.skill("c", "")
+        g = build.graph(build.personal_skills(), [], [], []); e = {(x["from"], x["to"]): x["type"] for x in g["edges"]}
+        self.assertEqual(e[("skill:a", "skill:c")], "works with"); self.assertEqual(e[("skill:a", "skill:b")], "mention")
+    def test_plugin_prefixed_name_resolves(self):
+        lines = list(build.works_with("## Works with\n- `env-pod-helper/agent-env-local-dev` — stack.\n- `claude-code-routines:routine-maintenance` — update.\n- no backtick here\n"))
+        self.assertEqual([n for _, n in lines], ["agent-env-local-dev", "routine-maintenance"])
+    def test_section_bounded_by_next_heading(self):
+        self.assertEqual(build.works_with_section("## Works with\n- `x` — a.\n\n## Pointers\n- `y`\n").strip(), "- `x` — a.")
