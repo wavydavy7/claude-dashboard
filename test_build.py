@@ -142,3 +142,21 @@ class Save(TmpHome):
     def test_global_md_writable_no_create(self):
         self.assertEqual(serve.save_payload(str(self.claude), "CLAUDE.md", "# G2\n")[1], 200)
         self.assertEqual(serve.save_payload(str(self.claude), "NEW.md", "x")[1], 404)
+
+
+class Connect(unittest.TestCase):
+    base = "---\nname: a\ndescription: d\n---\n# A\n\n## Procedure\n1. step\n"
+    def test_creates_section_and_backticks_name(self):
+        new, line = build.add_connection(self.base, "precedent", "run it before planning")
+        self.assertEqual(line, "- `precedent` — run it before planning.")
+        self.assertTrue(new.endswith("## Works with\n- `precedent` — run it before planning.\n"))
+    def test_appends_to_existing_section_before_next_heading(self):
+        first, _ = build.add_connection(self.base + "\n## Works with\n- `x` — one.\n\n## Pointers\n- p\n", "y", "two")
+        self.assertIn("- `x` — one.\n- `y` — two.\n\n## Pointers", first)
+    def test_keeps_user_backtick_or_slash(self):
+        _, l1 = build.add_connection(self.base, "integrate", "invoke `integrate` when data crosses a boundary")
+        _, l2 = build.add_connection(self.base, "integrate", "call /integrate first")
+        self.assertEqual(l1, "- invoke `integrate` when data crosses a boundary."); self.assertEqual(l2, "- call /integrate first.")
+    def test_idempotent_section_count(self):
+        new, _ = build.add_connection(self.base, "x", "one"); new, _ = build.add_connection(new, "y", "two")
+        self.assertEqual(new.count("## Works with"), 1)

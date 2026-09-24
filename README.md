@@ -54,6 +54,18 @@ file) and, for `SKILL.md`, checks the frontmatter: name must equal the folder,
 description required and ≤1024 chars; line and word budgets are warnings.
 Creating or deleting files is not supported here.
 
+## Connect skills (drag to link)
+
+**⇄ Connect skills** in the header opens a canvas of your skills, global files,
+and plugin skills with existing references drawn faintly. Drag from a node's dot
+onto another node and a dialog asks how the source should use the target, in one
+sentence Claude can act on (when to invoke it, what to do with the result).
+Choose a direction, or **Both** to write a sentence into each file. The sentence
+is appended as a bullet under `## Works with` in the source file, with the
+target's name in backticks so the Flow graph registers the edge. Writes go
+through the same path as the editor: backup, make-skill validation, rebuild.
+Plugin-cache and synced skills can be targets but are never modified.
+
 ## Flow tab
 
 The drawer has a second tab, **Flow**, showing how the item connects to the
@@ -89,7 +101,7 @@ and rebuilds, so nothing is lost.
 
 | file | purpose |
 |---|---|
-| `serve.py` | local HTTP helper: serves the page, handles `/refresh`, `/status`, `/skill`, `/issue/dismiss`, `/flag/silence`, `/flag/unsilence`, `POST /skill/save` |
+| `serve.py` | local HTTP helper: serves the page, handles `/refresh`, `/status`, `/skill`, `/issue/dismiss`, `/flag/silence`, `/flag/unsilence`, `POST /skill/save`, `POST /skill/connect` |
 | `build.py` | collects data and injects it into `template.html` → `dashboard.html` |
 | `template.html` | the page (CSS + render code); `/*__DATA__*/{}` is the injection point |
 | `cloud-prompt.txt` | the prompt `claude -p` runs to list routines |

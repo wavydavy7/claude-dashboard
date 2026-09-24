@@ -108,6 +108,44 @@
   .toast.show { opacity:1; }
   footer { color:var(--muted); font-size:12px; margin-top:30px; border-top:1px solid var(--line); padding-top:12px; }
 
+  /* connect overlay */
+  .cn { position:fixed; inset:0; background:var(--bg); z-index:30; display:none; flex-direction:column; }
+  .cn.open { display:flex; }
+  .cn-head { display:flex; gap:14px; align-items:center; padding:12px 20px; border-bottom:1px solid var(--line); background:var(--card); }
+  .cn-head h2 { margin:0; font-size:14px; }
+  .cn-head .hint { color:var(--muted); font-size:12.5px; }
+  .cn-body { position:relative; flex:1; overflow:auto; padding:22px 24px 60px; }
+  .cn-cols { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:26px; align-items:start; position:relative; z-index:2; }
+  .cn-col h4 { margin:0 0 8px; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); }
+  .cn-node { position:relative; background:var(--card); border:1.5px solid var(--c,var(--line)); border-radius:9px; padding:8px 12px 8px 12px; margin:0 0 8px; font-size:13px; cursor:grab; user-select:none; display:flex; align-items:center; gap:8px; }
+  .cn-node small { display:block; color:var(--muted); font-size:11px; }
+  .cn-node .h { flex:none; width:12px; height:12px; border-radius:50%; background:var(--c); opacity:.6; margin-left:auto; cursor:crosshair; }
+  .cn-node:hover .h { opacity:1; }
+  .cn-node.ro { cursor:default; } .cn-node.ro .h { display:none; }
+  .cn-node.target { outline:2px solid var(--accent); outline-offset:2px; }
+  .cn-node.dragging { opacity:.7; }
+  .cn-svg { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:1; overflow:visible; }
+  .cn-svg .old { fill:none; stroke:var(--muted); stroke-width:1.2; opacity:.3; }
+  .cn-svg .old.both { stroke:var(--accent); opacity:.5; }
+  .cn-svg .new { fill:none; stroke:var(--accent); stroke-width:2.2; stroke-dasharray:6 4; }
+  .cn-col.plugins .cn-node { padding:5px 10px; font-size:12px; margin-bottom:5px; }
+  .cn-col .grp { color:var(--muted); font-size:11px; margin:8px 0 4px; }
+  /* connection dialog */
+  .cn-dlg { position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:40; display:none; align-items:center; justify-content:center; }
+  .cn-dlg.open { display:flex; }
+  .cn-form { background:var(--card); border:1px solid var(--line); border-radius:14px; width:min(640px,94vw); padding:18px 20px; box-shadow:0 20px 60px rgba(0,0,0,.35); }
+  .cn-form h3 { margin:0 0 4px; font-size:16px; }
+  .cn-form .sub { color:var(--muted); font-size:12.5px; margin-bottom:12px; }
+  .cn-form label { display:block; font-size:12px; color:var(--muted); margin:10px 0 4px; }
+  .cn-form textarea { width:100%; min-height:64px; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:13px/1.45 inherit; background:var(--bg); color:var(--ink); resize:vertical; }
+  .cn-form textarea:focus { outline:2px solid var(--accent); border-color:transparent; }
+  .cn-form .dirs { display:flex; gap:6px; flex-wrap:wrap; }
+  .cn-form .dirs .btn.on { background:var(--accent-bg); color:var(--accent); border-color:transparent; }
+  .cn-form .dirs .btn:disabled { opacity:.4; text-decoration:line-through; }
+  .cn-form .preview { background:var(--chip); border-radius:8px; padding:8px 10px; font-family:ui-monospace,Menlo,monospace; font-size:11.5px; white-space:pre-wrap; margin-top:6px; color:var(--muted); }
+  .cn-form .row { display:flex; gap:8px; justify-content:flex-end; margin-top:14px; align-items:center; }
+  .cn-form .row .msg { margin-right:auto; font-size:12px; color:var(--bad); }
+
   /* skill detail drawer */
   .clickable { cursor:pointer; }
   .clickable:hover .name { color:var(--accent); }
@@ -190,6 +228,7 @@
       <div class="refresh">
         <button class="btn primary" id="rf-fast" title="Re-read skills, plugins, hooks, tasks from ~/.claude (seconds)">↻ Refresh</button>
         <button class="btn" id="rf-full" title="Also re-list cloud routines via a headless Claude session (1–3 min)">↻ Refresh + cloud</button>
+        <button class="btn" id="cn-open" title="Drag one skill onto another to write a connection into its SKILL.md">⇄ Connect skills</button>
       </div>
     </div>
     <div class="status" id="rf-status"></div>
@@ -205,6 +244,17 @@
 <div id="sections"></div>
 
 <div class="toast" id="toast"></div>
+<div class="cn" id="cn">
+  <div class="cn-head"><h2>Connect skills</h2><span class="hint">Drag from a node's dot onto another node. You'll be asked how they connect; the sentence is appended under <code>## Works with</code> in the source skill. Grey nodes are read-only and can only be targets.</span><button class="btn" id="cn-close" style="margin-left:auto">Close (Esc)</button></div>
+  <div class="cn-body" id="cn-body"><svg class="cn-svg" id="cn-svg"></svg><div class="cn-cols" id="cn-cols"></div></div>
+</div>
+<div class="cn-dlg" id="cn-dlg"><form class="cn-form" id="cn-form">
+  <h3 id="cnf-title"></h3><div class="sub" id="cnf-sub"></div>
+  <label>Direction</label><div class="dirs"><button type="button" class="btn on" data-dir="ab" id="cnf-ab"></button><button type="button" class="btn" data-dir="ba" id="cnf-ba"></button><button type="button" class="btn" data-dir="both" id="cnf-both">Both ⇄</button></div>
+  <div id="cnf-a"><label id="cnf-a-label"></label><textarea id="cnf-a-text" placeholder="e.g. Before planning, invoke it to gather prior art; its table goes into plan step 3."></textarea><div class="preview" id="cnf-a-prev"></div></div>
+  <div id="cnf-b" style="display:none"><label id="cnf-b-label"></label><textarea id="cnf-b-text"></textarea><div class="preview" id="cnf-b-prev"></div></div>
+  <div class="row"><span class="msg" id="cnf-msg"></span><button type="button" class="btn" id="cnf-cancel">Cancel</button><button type="submit" class="btn primary" id="cnf-save">Write connection</button></div>
+</form></div>
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" aria-hidden="true">
   <div class="dr-head"><div><h3 id="dr-title"></h3><div class="path" id="dr-path"></div></div>
@@ -529,6 +579,97 @@ document.addEventListener("click", e => {
 $("#dr-files").addEventListener("click", e => { const a=e.target.closest(".f"); if (a) loadSkillFile(currentDir, a.dataset.rel); });
 $("#dr-close").onclick = closeDrawer; scrim.onclick = closeDrawer;
 document.addEventListener("keydown", e => { if (e.key==="Escape" && !drawer.classList.contains("editing")) closeDrawer(); });
+
+// ---------- connect overlay: drag one skill onto another, describe the link, write it ----------
+const cn=$("#cn"), cnCols=$("#cn-cols"), cnSvg=$("#cn-svg"), cnDlg=$("#cn-dlg");
+const writableKinds = new Set(["skill","file"]);   // scheduled tasks are not graph nodes; plugin/synced are read-only
+function nodeDir(n){ return n.path.replace(/\/[^/]+$/,""); }
+function nodeFile(n){ return n.path.split("/").pop(); }
+function renderConnect(){
+  const groups = { skill:[], file:[], synced:[], pskill:{} };
+  G.nodes.forEach(n=>{ if(n.kind==="pskill") (groups.pskill[n.plugin] ||= []).push(n); else if(groups[n.kind] && n.path) groups[n.kind].push(n); });
+  const node = n => `<div class="cn-node${writableKinds.has(n.kind)?"":" ro"}" data-node="${esc(n.id)}" style="--c:${(KIND[n.kind]||KIND.skill).c}" title="${esc(n.name)}"><div>${esc(n.name)}${n.kind==="file"?"":`<small>${esc(n.kind==="pskill"?n.plugin:KIND[n.kind].label)}</small>`}</div><span class="h" title="drag to connect"></span></div>`;
+  cnCols.innerHTML = `<div class="cn-col"><h4>Your skills</h4>${groups.skill.map(node).join("")||'<div class="empty">none</div>'}</div>
+    <div class="cn-col"><h4>Global files</h4>${groups.file.map(node).join("")}</div>
+    <div class="cn-col"><h4>claude.ai skills · read-only</h4>${groups.synced.map(node).join("")}</div>
+    <div class="cn-col plugins"><h4>Plugin skills · read-only</h4>${Object.entries(groups.pskill).map(([p,ns])=>`<div class="grp">${esc(p)}</div>${ns.map(node).join("")}`).join("")}</div>`;
+  requestAnimationFrame(drawExisting);
+}
+function center(el, side){ const b=el.getBoundingClientRect(), c=$("#cn-body").getBoundingClientRect(); return {x: b.left - c.left + $("#cn-body").scrollLeft + (side==="l"?0:side==="r"?b.width:b.width/2), y: b.top - c.top + $("#cn-body").scrollTop + b.height/2}; }
+function curve(a,b){ const dx=Math.max(40,Math.abs(b.x-a.x)/2); return `M${a.x},${a.y} C${a.x+dx},${a.y} ${b.x-dx},${b.y} ${b.x},${b.y}`; }
+function drawExisting(){
+  const body=$("#cn-body"); cnSvg.setAttribute("width", body.scrollWidth); cnSvg.setAttribute("height", body.scrollHeight);
+  const pos = id => { const el=cnCols.querySelector(`.cn-node[data-node="${CSS.escape(id)}"]`); return el ? {el} : null; };
+  const pairs = new Set(G.edges.filter(e=>e.type!=="part of").map(e=>e.from+"→"+e.to));
+  let out = "";
+  G.edges.filter(e=>e.type!=="part of").forEach(e=>{ const a=pos(e.from), b=pos(e.to); if(!a||!b) return; const both = pairs.has(e.to+"→"+e.from); if (both && e.from > e.to) return;
+    const A=center(a.el,"r"), B=center(b.el,"l"); const ax=A.x>B.x?center(a.el,"l"):A, bx=A.x>B.x?center(b.el,"r"):B;
+    out += `<path class="old${both?" both":""}" d="${curve(ax,bx)}"></path>`; });
+  cnSvg.innerHTML = out + '<path class="new" id="cn-live" d=""></path>';
+}
+let drag = null;
+cnCols.addEventListener("pointerdown", e => {
+  const h = e.target.closest(".h"); if (!h) return; const el = h.closest(".cn-node"); const n = NODE[el.dataset.node]; if (!n || !writableKinds.has(n.kind)) return;
+  drag = {from:n, el}; el.classList.add("dragging"); cnCols.setPointerCapture?.(e.pointerId); e.preventDefault();
+});
+document.addEventListener("pointermove", e => {
+  if (!drag) return; const c=$("#cn-body").getBoundingClientRect(); const a=center(drag.el,"r");
+  $("#cn-live").setAttribute("d", curve(a, {x:e.clientX-c.left+$("#cn-body").scrollLeft, y:e.clientY-c.top+$("#cn-body").scrollTop}));
+  cnCols.querySelectorAll(".cn-node.target").forEach(x=>x.classList.remove("target"));
+  const over = document.elementFromPoint(e.clientX, e.clientY)?.closest(".cn-node"); if (over && over!==drag.el) over.classList.add("target");
+});
+document.addEventListener("pointerup", e => {
+  if (!drag) return; const over = document.elementFromPoint(e.clientX, e.clientY)?.closest(".cn-node");
+  const from = drag.from; drag.el.classList.remove("dragging"); drag = null; $("#cn-live").setAttribute("d",""); cnCols.querySelectorAll(".cn-node.target").forEach(x=>x.classList.remove("target"));
+  if (over && over.dataset.node !== from.id) openConnectDialog(from, NODE[over.dataset.node]);
+});
+// dialog
+let cnPair = null, cnDir = "ab";
+const cnLine = (other, how) => { how = how.trim().replace(/\s+/g," ").replace(/\.$/,"") + "."; if (!how.includes("`"+other+"`") && !how.includes("/"+other)) how = "`"+other+"` — "+how; return "- "+how; };
+function openConnectDialog(a, b){
+  cnPair = {a,b}; const aw = writableKinds.has(a.kind), bw = writableKinds.has(b.kind);
+  cnDir = aw ? "ab" : "ba";
+  $("#cnf-title").textContent = `${a.name} ⇄ ${b.name}`;
+  $("#cnf-sub").textContent = "Describe how one should use the other, in one sentence Claude can act on: when to invoke it and what to do with the result. It is appended under \"## Works with\" in the source file.";
+  $("#cnf-ab").textContent = `${a.name} → ${b.name}`; $("#cnf-ba").textContent = `${b.name} → ${a.name}`;
+  $("#cnf-ab").disabled = !aw; $("#cnf-ba").disabled = !bw; $("#cnf-both").disabled = !(aw && bw);
+  $("#cnf-a-text").value = ""; $("#cnf-b-text").value = ""; $("#cnf-msg").textContent = "";
+  setDir(cnDir); cnDlg.classList.add("open"); setTimeout(()=>$("#cnf-a-text").focus(), 50);
+}
+function setDir(d){
+  cnDir = d; document.querySelectorAll("#cn-form .dirs .btn").forEach(b=>b.classList.toggle("on", b.dataset.dir===d));
+  const {a,b} = cnPair; const first = d==="ba" ? [b,a] : [a,b];
+  $("#cnf-a-label").textContent = `How ${first[0].name} uses ${first[1].name} (written into ${first[0].name})`;
+  $("#cnf-b").style.display = d==="both" ? "" : "none";
+  if (d==="both") $("#cnf-b-label").textContent = `How ${b.name} uses ${a.name} (written into ${b.name})`;
+  updatePreview();
+}
+function updatePreview(){
+  const {a,b} = cnPair; const first = cnDir==="ba" ? [b,a] : [a,b];
+  $("#cnf-a-prev").textContent = $("#cnf-a-text").value.trim() ? cnLine(first[1].name, $("#cnf-a-text").value) : "";
+  $("#cnf-b-prev").textContent = cnDir==="both" && $("#cnf-b-text").value.trim() ? cnLine(a.name, $("#cnf-b-text").value) : "";
+}
+document.querySelectorAll("#cn-form .dirs .btn").forEach(b=>b.onclick=()=>setDir(b.dataset.dir));
+$("#cnf-a-text").addEventListener("input", updatePreview); $("#cnf-b-text").addEventListener("input", updatePreview);
+$("#cnf-cancel").onclick = () => cnDlg.classList.remove("open");
+$("#cn-form").addEventListener("submit", async e => {
+  e.preventDefault(); const {a,b} = cnPair; const msg=$("#cnf-msg"); const writes = [];
+  const first = cnDir==="ba" ? [b,a] : [a,b];
+  if (!$("#cnf-a-text").value.trim()) { msg.textContent = "Write how the connection works first."; return; }
+  writes.push({src:first[0], other:first[1], how:$("#cnf-a-text").value});
+  if (cnDir==="both") { if (!$("#cnf-b-text").value.trim()) { msg.textContent = "Both directions need a sentence."; return; } writes.push({src:b, other:a, how:$("#cnf-b-text").value}); }
+  $("#cnf-save").disabled = true; msg.textContent = "";
+  for (const w of writes) {
+    const r = await fetch("/skill/connect", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({dir: nodeDir(w.src), file: nodeFile(w.src), other: w.other.name, how: w.how})}).then(x=>x.json()).catch(e=>({error:String(e)}));
+    if (!r.ok) { msg.textContent = `${w.src.name}: ${r.error||"failed"}`; $("#cnf-save").disabled = false; return; }
+  }
+  $("#cnf-save").disabled = false; cnDlg.classList.remove("open");
+  toast(`Written to ${writes.map(w=>w.src.name).join(" and ")}. Reloading to redraw the graph…`); setTimeout(()=>location.reload(), 900);
+});
+$("#cn-open").onclick = () => { if (!served) { toast("Connecting needs the helper: python3 ~/claude-dashboard/serve.py"); return; } cn.classList.add("open"); renderConnect(); };
+$("#cn-close").onclick = () => cn.classList.remove("open");
+document.addEventListener("keydown", e => { if (e.key==="Escape") { if (cnDlg.classList.contains("open")) cnDlg.classList.remove("open"); else if (cn.classList.contains("open")) cn.classList.remove("open"); } });
+window.addEventListener("resize", () => { if (cn.classList.contains("open")) drawExisting(); });
 
 // ---------- filter ----------
 $("#q").addEventListener("input", e => { const q=e.target.value.trim().toLowerCase(); document.querySelectorAll(".card").forEach(c=>c.classList.toggle("hide", q && !c.dataset.text.includes(q))); });

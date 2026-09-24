@@ -9,6 +9,8 @@
   GET /issue/dismiss?id=<id>           move a logged skill issue to the dismissed file, rebuild
   GET /flag/silence?key=<k>            hide a computed Needs-attention bullet (silenced.json), rebuild
   GET /flag/unsilence?key=<k>          show it again
+  POST /skill/connect {dir, file, other, how}   append "how" as a bullet under "## Works with" in dir/file,
+                                            guaranteeing `other` appears in backticks; same guards/backup as save.
   POST /skill/save  {dir, file, content}   write a file you own (your skills, scheduled tasks, ~/.claude/*.md);
                                             plugin-cache skills are read-only. Backs up the old version, validates, rebuilds.
 """
@@ -122,11 +124,21 @@ class H(SimpleHTTPRequestHandler):
         return super().do_GET()
     def do_POST(self):
         u = urllib.parse.urlparse(self.path)
-        if u.path != "/skill/save": return self.send_json({"error": "not found"}, 404)
+        if u.path not in ("/skill/save", "/skill/connect"): return self.send_json({"error": "not found"}, 404)
         n = int(self.headers.get("Content-Length") or 0)
         if n > MAX_FILE + 10_000: return self.send_json({"error": "too large"}, 413)
         try: body = json.loads(self.rfile.read(n).decode())
         except (json.JSONDecodeError, UnicodeDecodeError): return self.send_json({"error": "invalid JSON"}, 400)
+        if u.path == "/skill/connect":
+            other, how = (body.get("other") or "").strip(), (body.get("how") or "").strip()
+            if not other or not how: return self.send_json({"error": "other and how are required"}, 400)
+            d = Path(body.get("dir", "")).expanduser().resolve(); target = (d / (body.get("file") or "SKILL.md")).resolve()
+            if d not in target.parents or not target.is_file(): return self.send_json({"error": "file not found"}, 404)
+            if not is_writable(target): return self.send_json({"error": "read-only: plugin-cache and synced skills cannot be modified; connect from the other side"}, 403)
+            new_text, line = build.add_connection(target.read_text(errors="replace"), other, how)
+            out, code = save_payload(str(d), target.name, new_text)
+            if code == 200: out["line"] = line
+            return self.send_json(out, code)
         out, code = save_payload(body.get("dir", ""), body.get("file"), body.get("content", ""))
         return self.send_json(out, code)
     def end_headers(self):

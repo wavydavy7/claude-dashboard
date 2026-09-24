@@ -211,6 +211,31 @@ def validate_skill(text, dirname):
     if words > 900: warnings.append(f"{words} words; make-skill budget is ~900")
     return errors, warnings
 
+CONNECT_HEADING = "## Works with"
+
+def add_connection(text, other_name, how):
+    """Return (new_text, line) with a bullet appended under CONNECT_HEADING (created at the end if absent).
+    The bullet always contains `other_name` in backticks so the reference graph picks it up."""
+    how = " ".join(how.split()).strip().rstrip(".") + "."
+    if f"`{other_name}`" not in how and f"/{other_name}" not in how:
+        how = f"`{other_name}` — {how}"
+    line = f"- {how}"
+    body = text.rstrip("\n")
+    if re.search(rf"^{re.escape(CONNECT_HEADING)}\s*$", body, re.M):
+        # append after the last bullet of that section
+        parts = re.split(rf"(^{re.escape(CONNECT_HEADING)}\s*$)", body, maxsplit=1, flags=re.M)
+        head, heading, rest = parts[0], parts[1], parts[2]
+        m = re.search(r"^#{1,6}\s", rest.lstrip("\n"), re.M)  # next heading inside rest?
+        if m:
+            idx = rest.lstrip("\n").index(m.group(0)); lead = len(rest) - len(rest.lstrip("\n"))
+            section, tail = rest[:lead + idx].rstrip("\n"), rest[lead + idx:]
+            new = f"{head}{heading}{section}\n{line}\n\n{tail}"
+        else:
+            new = f"{head}{heading}{rest.rstrip()}\n{line}"
+    else:
+        new = f"{body}\n\n{CONNECT_HEADING}\n{line}"
+    return new.rstrip("\n") + "\n", line
+
 def graph(personal, plugs, synced, instr):
     """Nodes = skills, plugin skills, synced skills, plugins, global files. Edges = textual references between them."""
     nodes, by_name = [], {}
