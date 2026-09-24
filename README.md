@@ -80,8 +80,10 @@ example global rule file; see below). **Mentions** (faint dotted): any other
 place the text names another item. Hyphenated names match anywhere;
 single-word names (`run`, `loop`) only count as `/name`, `` `name` ``, or
 "name skill". A mention of another skill with no matching declaration is
-listed under Needs attention as undeclared. CLAUDE.md `@imports` and plugin
-membership are dashed.
+listed under Needs attention as undeclared. Global instruction files
+(`~/.claude/CLAUDE.md` and its `@imports`) are always in context, so a skill
+naming one is not a connection and is not drawn. CLAUDE.md `@imports` and
+plugin membership are dashed.
 
 To adopt the convention, add a global instruction file telling Claude to
 declare dependencies under `## Works with` at the moment it creates them, and

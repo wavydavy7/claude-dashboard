@@ -50,12 +50,12 @@ class Graph(TmpHome):
         e = self.edges(build.personal_skills())
         self.assertNotIn(("skill:a", "skill:run", "mention"), e)
         self.assertIn(("skill:b", "skill:run", "mention"), e)
-    def test_global_file_matched_via_path_and_imports_win(self):
+    def test_skill_to_global_file_is_not_an_edge_imports_win(self):
         (self.claude / "CLAUDE.md").write_text("@DEV-PROCESS.md\n# Rules\nSee DEV-PROCESS.md often.\n")
         (self.claude / "DEV-PROCESS.md").write_text("# Dev Process\n")
         self.skill("s", "Sources: `~/.claude/DEV-PROCESS.md`.")
         instr = build.instructions(); e = self.edges(build.personal_skills(), instr)
-        self.assertIn(("skill:s", "file:DEV-PROCESS.md", "mention"), e)
+        self.assertFalse([x for x in e if x[0] == "skill:s" and x[1] == "file:DEV-PROCESS.md"])  # always-loaded: never an edge
         self.assertIn(("file:CLAUDE.md", "file:DEV-PROCESS.md", "imports"), e)
         self.assertNotIn(("file:CLAUDE.md", "file:DEV-PROCESS.md", "mention"), e)  # one edge per pair
     def test_no_self_edges(self):

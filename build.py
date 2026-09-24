@@ -278,7 +278,9 @@ def graph(personal, plugs, synced, instr):
                 for t in resolve(imp, n["id"]): emit(n["id"], t, "imports", f"@{imp}")
         # 1) declared dependencies: bullets under "## Works with" (see ~/.claude/SKILL-CONNECTIONS.md)
         for line, name in works_with(text):
-            for t in resolve(name, n["id"]): emit(n["id"], t, "works with", line)
+            for t in resolve(name, n["id"]):
+                if t.startswith("file:") and n["kind"] != "file": continue  # global files are always loaded: not a dependency
+                emit(n["id"], t, "works with", line)
         # 2) undeclared mentions anywhere else in the body
         body = re.sub(r"^---\n.*?\n---\n", "", text, count=1, flags=re.S) if n["kind"] != "file" else text
         body = strip_works_with(body)
@@ -287,6 +289,7 @@ def graph(personal, plugs, synced, instr):
                 if name == n["name"] or not pat.search(line): continue
                 for t in resolve(name, n["id"]):
                     if t.startswith("plugin:") and n["kind"] == "pskill" and n["plugin"] == name: continue
+                    if t.startswith("file:") and n["kind"] != "file": continue  # always-loaded global file: not a connection
                     emit(n["id"], t, "mention", line)
     return {"nodes": nodes, "edges": edges}
 
