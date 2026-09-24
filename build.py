@@ -289,8 +289,7 @@ def graph(personal, plugs, synced, instr):
                 if name == n["name"] or not pat.search(line): continue
                 for t in resolve(name, n["id"]):
                     if t.startswith("plugin:"): continue  # a plugin container is not a skill; membership is drawn via "part of"
-                    if t.startswith("file:") and n["kind"] != "file": continue  # always-loaded global file: not a connection
-                    if t.startswith("file:") and n["kind"] == "file": continue  # file->file: only @imports count
+                    if t.startswith("file:") or n["kind"] == "file": continue  # global files are always loaded: only their @imports are drawn
                     emit(n["id"], t, "mention", line)
     return {"nodes": nodes, "edges": edges}
 
