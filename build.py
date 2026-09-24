@@ -290,6 +290,7 @@ def graph(personal, plugs, synced, instr):
                 for t in resolve(name, n["id"]):
                     if t.startswith("plugin:") and n["kind"] == "pskill" and n["plugin"] == name: continue
                     if t.startswith("file:") and n["kind"] != "file": continue  # always-loaded global file: not a connection
+                    if t.startswith("file:") and n["kind"] == "file": continue  # file->file: only @imports count
                     emit(n["id"], t, "mention", line)
     return {"nodes": nodes, "edges": edges}
 
