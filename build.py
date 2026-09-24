@@ -288,7 +288,7 @@ def graph(personal, plugs, synced, instr):
             for name, pat in pats.items():
                 if name == n["name"] or not pat.search(line): continue
                 for t in resolve(name, n["id"]):
-                    if t.startswith("plugin:") and n["kind"] == "pskill" and n["plugin"] == name: continue
+                    if t.startswith("plugin:"): continue  # a plugin container is not a skill; membership is drawn via "part of"
                     if t.startswith("file:") and n["kind"] != "file": continue  # always-loaded global file: not a connection
                     if t.startswith("file:") and n["kind"] == "file": continue  # file->file: only @imports count
                     emit(n["id"], t, "mention", line)
